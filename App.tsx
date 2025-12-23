@@ -399,7 +399,7 @@ export default function App() {
 
   if (state.step === 'welcome') {
     return (
-      <div className="h-[100dvh] w-full bg-slate-50 text-slate-900 flex flex-col items-center overflow-hidden p-6 safe-area-inset-bottom relative">
+      <div className="h-[100dvh] w-full bg-slate-50 text-slate-900 flex flex-col items-center overflow-y-auto p-6 safe-area-inset-bottom relative">
         <div className="absolute top-6 right-6 text-[10px] text-slate-300 font-mono z-20">© 802711</div>
         {showChangelog && (
             <div className="fixed inset-0 z-[120] bg-black/60 backdrop-blur-sm flex items-center justify-center p-6 animate-in fade-in duration-200" onClick={() => setShowChangelog(false)}>
@@ -428,8 +428,8 @@ export default function App() {
             </div>
         )}
 
-        <div className="flex-1 w-full max-w-md flex flex-col justify-evenly py-2">
-            <div className="text-center space-y-4 pt-2">
+        <div className="flex-1 w-full max-w-md flex flex-col justify-evenly py-2 min-h-[500px]">
+            <div className="text-center space-y-4 pt-2 shrink-0">
                 <div className="bg-blue-600 w-20 h-20 rounded-2xl flex items-center justify-center mx-auto shadow-xl shadow-blue-200">
                   <Plane size={42} className="text-white" />
                 </div>
@@ -447,7 +447,7 @@ export default function App() {
                 </div>
             </div>
 
-          <div className="bg-white p-6 rounded-[2rem] space-y-5 shadow-sm border border-slate-100 w-full">
+          <div className="bg-white p-6 rounded-[2rem] space-y-5 shadow-sm border border-slate-100 w-full shrink-0">
             <div>
               <label className="text-[10px] font-bold text-slate-400 uppercase mb-1.5 block pl-1">注册号 / REG</label>
               <div className="flex bg-slate-50 rounded-2xl border border-slate-200 overflow-hidden focus-within:border-blue-500 transition-all relative">
@@ -465,7 +465,7 @@ export default function App() {
             <button disabled={!state.info.registration || !state.info.inspectorName} onClick={() => setStep('inspect')} className="w-full bg-[#007AFF] text-white font-bold py-4 rounded-2xl text-lg shadow-xl shadow-blue-200 disabled:opacity-50 active:scale-[0.98] transition-all flex items-center justify-center gap-2 mt-2">开始检查 <ChevronRight size={20} /></button>
           </div>
 
-          <div className="bg-orange-50/60 p-5 rounded-2xl border border-orange-100 text-left w-full">
+          <div className="bg-orange-50/60 p-5 rounded-2xl border border-orange-100 text-left w-full shrink-0">
             <strong className="text-red-600 text-xs font-black uppercase tracking-wider block mb-2 flex items-center gap-2"><AlertTriangle size={14}/> 务必注意 / ATTENTION</strong>
             <div className="space-y-1.5 text-[11px] text-orange-800 leading-snug font-bold opacity-80">
                {INSPECTOR_REQUIREMENTS.map((req, i) => (
