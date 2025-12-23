@@ -1,5 +1,5 @@
 {
-  "name": "开发板---final-check ",
+  "name": "正式版01---final-check ",
   "description": "Digital Final Inspection Checklist for Aircraft Maintenance with photo verification and digital signature.",
   "requestFramePermissions": [
     "camera"
