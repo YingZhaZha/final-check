@@ -13,6 +13,7 @@ interface Props {
 export const ExportModal: React.FC<Props> = ({ isOpen, onClose, onConfirm, isProcessing }) => {
   const webcamRef = useRef<Webcam>(null);
   const sigPadRef = useRef<SignatureCanvas>(null);
+  const SignaturePad = SignatureCanvas as any;
   
   const [selfie, setSelfie] = useState<string | null>(null);
   const [signature, setSignature] = useState<string | null>(null);
@@ -152,7 +153,7 @@ export const ExportModal: React.FC<Props> = ({ isOpen, onClose, onConfirm, isPro
 
               <div ref={containerRef} className={`relative flex-1 bg-white overflow-hidden touch-none shadow-inner ${isLandscapeMode ? 'fixed inset-0 z-10' : 'rounded-xl border-2 border-slate-300 min-h-[300px]'}`}>
                 {!signature ? (
-                  <SignatureCanvas
+                  <SignaturePad
                     ref={sigPadRef}
                     penColor="black"
                     velocityFilterWeight={0.7}

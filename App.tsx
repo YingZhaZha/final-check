@@ -197,7 +197,7 @@ export default function App() {
       ...prev,
       session: {
         ...prev.session,
-        [uniqueId]: { ...(prev.session[uniqueId] || { status: 'unchecked', photos: [] }), ...updates }
+        [uniqueId]: { ...(prev.session[uniqueId] || { status: 'unchecked', timestamp: null, photos: [], issuePhotos: [] }), ...updates }
       }
     }));
   };
@@ -236,14 +236,14 @@ export default function App() {
         section.items.forEach(item => {
           if (item.type === 'simple') {
             if (!newSession[item.id] || newSession[item.id].status === 'unchecked') {
-               newSession[item.id] = { ...(newSession[item.id] || { photos: [] }), status: 'ok', timestamp };
+               newSession[item.id] = { ...(newSession[item.id] || { photos: [], issuePhotos: [] }), status: 'ok', timestamp };
                newAutoChecked.push(item.id);
             }
           } else {
             item.subItems?.forEach(sub => {
               const uid = `${item.id}_${sub.id}`;
               if (!newSession[uid] || newSession[uid].status === 'unchecked') {
-                newSession[uid] = { ...(newSession[uid] || { photos: [] }), status: 'ok', timestamp };
+                newSession[uid] = { ...(newSession[uid] || { photos: [], issuePhotos: [] }), status: 'ok', timestamp };
                 newAutoChecked.push(uid);
               }
             });
@@ -480,8 +480,10 @@ export default function App() {
     return (
       <div className="h-[100dvh] w-full bg-slate-50 text-slate-900 flex flex-col items-center overflow-y-auto p-6 safe-area-inset-bottom relative">
         <div className="absolute top-6 right-6 text-[10px] text-slate-300 font-mono z-20">© 802711</div>
+        {/* ... Changelog Modal ... */}
         {showChangelog && (
             <div className="fixed inset-0 z-[120] bg-black/60 backdrop-blur-sm flex items-center justify-center p-6 animate-in fade-in duration-200" onClick={() => setShowChangelog(false)}>
+                {/* ... */}
                 <div className="bg-white rounded-3xl p-6 w-full max-w-sm shadow-2xl relative max-h-[70vh] flex flex-col" onClick={e => e.stopPropagation()}>
                     <button onClick={() => setShowChangelog(false)} className="absolute top-4 right-4 p-2 bg-slate-100 rounded-full text-slate-500 hover:bg-slate-200 transition-colors"><X size={18} /></button>
                     <h3 className="text-xl font-bold text-slate-800 mb-6 flex items-center gap-2"><History size={20} className="text-blue-600"/> 更新日志</h3>
@@ -788,6 +790,7 @@ export default function App() {
                 <span className="bg-slate-900/80 backdrop-blur px-3 py-1 rounded-full text-white text-[10px] font-bold flex items-center gap-1"><Smartphone className="rotate-90" size={12}/> 请横屏持机签署</span>
               </div>
               <div ref={sigContainerRef} className="flex-1 relative bg-white overflow-hidden sig-canvas-container">
+                {/* @ts-ignore */}
                 <SignatureCanvas ref={sigPadRef} canvasProps={{ className: 'sigCanvas' }} penColor='black' velocityFilterWeight={0.6} minWidth={1.5} maxWidth={5.5} />
               </div>
               <div className="absolute bottom-6 w-full flex justify-center gap-6 z-20 pointer-events-none">
@@ -818,13 +821,13 @@ export default function App() {
                                        <h3 className="flex items-center gap-2 text-red-600 font-black text-sm uppercase tracking-wider">
                                            <AlertTriangle size={16} /> 存在缺陷 / 回顾
                                        </h3>
-                                       {/* Share Issues Button */}
+                                       {/* Share Issues Button - Corrected Arrow */}
                                        <button 
                                           onClick={handleShareIssues} 
                                           data-html2canvas-ignore
                                           className="flex items-center gap-1.5 text-xs font-bold bg-red-50 text-red-600 px-3 py-1.5 rounded-lg border border-red-100 active:scale-95 transition-all shadow-sm"
                                        >
-                                           <Share2 size={14}/> 分享缺陷→整改
+                                           <Share2 size={14}/> 分享缺陷 → 整改
                                        </button>
                                    </div>
                                    
@@ -1117,20 +1120,6 @@ export default function App() {
                )}
             </div>
          </div>
-         {generatedFile && (
-           <div className="fixed inset-0 z-[200] bg-black/80 flex items-center justify-center p-4 backdrop-blur-md">
-             <div className="bg-white rounded-3xl p-8 w-full max-sm text-center space-y-6">
-                 <FileCheck size={64} className="text-blue-500 mx-auto" />
-                 <div><h3 className="text-2xl font-bold text-slate-900">报告已成功签署</h3></div>
-                 <div className="space-y-3">
-                   <button onClick={handleShare} className="w-full py-4 bg-emerald-600 text-white rounded-2xl font-bold shadow-lg flex items-center justify-center gap-2"><Share2 size={24} /> 分享 PDF 报告</button>
-                   <button onClick={handleDownload} className="w-full py-4 bg-blue-600 text-white rounded-2xl font-bold shadow-lg flex items-center justify-center gap-2"><Download size={24} /> 下载 PDF 报告</button>
-                   <button onClick={() => setGeneratedFile(null)} className="w-full py-4 bg-slate-100 text-slate-600 rounded-2xl font-bold">返回</button>
-                   <button onClick={handleConfirmReset} className="w-full py-4 bg-slate-50 text-slate-400 rounded-2xl font-bold text-sm">检查下一架飞机</button>
-                 </div>
-             </div>
-           </div>
-         )}
          
          {/* Hidden Batch Share Image Template */}
          <div 
