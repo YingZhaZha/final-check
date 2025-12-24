@@ -261,6 +261,8 @@ export const CheckItem: React.FC<Props> = ({
   const handleRectifySubmit = () => {
       onUpdate(uniqueId, { 
           status: 'ok', 
+          // Req 7: Auto star when rectified
+          isStarred: true, 
           timestamp: new Date().toISOString(),
           rectification: {
               method: rectifyMethod || '已现场整改',
@@ -629,14 +631,14 @@ export const CheckItem: React.FC<Props> = ({
                )}
             </div>
 
-            {/* Normal Photos Preview */}
+            {/* Normal Photos Preview - Req 2: Added pt-3 pr-3 to fix cutoff, changed button to red */}
             {(entry?.photos && entry.photos.length > 0) && (
-                <div className="flex gap-2 overflow-x-auto mb-3 pb-1">
+                <div className="flex gap-2 overflow-x-auto mb-3 pb-1 pt-3 pr-3">
                     {entry.photos.map((p, i) => (
                         <div key={i} className="relative w-16 h-16 shrink-0">
                             <img src={p} className="w-full h-full object-cover rounded-lg border border-slate-200" onClick={() => setPreviewImage(p)} />
                              <button onClick={() => removeNormalPhoto(i)} 
-                                  className="absolute -top-2 -right-2 bg-slate-500 text-white rounded-full w-5 h-5 flex items-center justify-center shadow-md z-10">
+                                  className="absolute -top-2 -right-2 bg-red-600 text-white rounded-full w-5 h-5 flex items-center justify-center shadow-md z-10">
                                 <X size={12}/>
                               </button>
                         </div>
@@ -682,8 +684,8 @@ export const CheckItem: React.FC<Props> = ({
                   {/* Defect Photos */}
                   <div>
                       <label className="text-xs font-bold text-slate-400 uppercase mb-1.5 block">缺陷照片</label>
-                      {/* Updated padding for X button overflow */}
-                      <div className="flex gap-3 mb-2 overflow-x-auto pt-4 pr-4 pl-1 pb-1">
+                      {/* Req 2: Updated padding for X button overflow */}
+                      <div className="flex gap-3 mb-2 overflow-x-auto pt-5 pr-5 pl-1 pb-1">
                           {defectPhotos.map((p, i) => (
                               <div key={i} className="relative w-16 h-16 shrink-0">
                                   <img src={p} className="w-full h-full object-cover rounded-lg border border-slate-200 shadow-sm" onClick={() => setPreviewImage(p)} />
@@ -699,18 +701,17 @@ export const CheckItem: React.FC<Props> = ({
                       </div>
                   </div>
 
-                  <div className="flex flex-col gap-3 mt-2">
-                      <div className="flex gap-3">
-                          <button onClick={() => handleDefectConfirm(false)} className="flex-[2] py-3 bg-red-600 text-white font-bold rounded-xl text-sm shadow-md">确认提交</button>
-                          
-                          <button onClick={handleShareDefect} className="flex-1 py-3 bg-blue-50 text-blue-600 border border-blue-100 font-bold rounded-xl flex items-center justify-center gap-1 text-sm">
-                              {isSharing ? <div className="animate-spin w-4 h-4 border-2 border-current border-t-transparent rounded-full"/> : <><Share2 size={16}/> 分享</>}
-                          </button>
-                      </div>
-                      
-                      <button onClick={() => handleDefectConfirm(true)} className="w-full py-4 bg-emerald-600 text-white font-bold rounded-xl shadow-lg shadow-emerald-200 flex items-center justify-center gap-2">
-                         <Wrench size={18} /> 前往整改
-                      </button>
+                  {/* Req 1 & 5: Updated Layout and Rectify Button Style (Green/White) */}
+                  <div className="flex gap-2 mt-2">
+                       <button onClick={() => handleDefectConfirm(true)} className="flex-[1] py-3 bg-emerald-600 text-white font-bold rounded-xl flex items-center justify-center gap-1 text-xs active:bg-emerald-700 shadow-md">
+                          <Wrench size={14} /> 前往整改
+                       </button>
+                       <button onClick={handleShareDefect} className="flex-[1] py-3 bg-blue-50 text-blue-600 border border-blue-100 font-bold rounded-xl flex items-center justify-center gap-1 text-xs active:bg-blue-100">
+                          {isSharing ? <div className="animate-spin w-3 h-3 border-2 border-current border-t-transparent rounded-full"/> : <><Share2 size={14}/> 分享</>}
+                       </button>
+                       <button onClick={() => handleDefectConfirm(false)} className="flex-[2] py-3 bg-red-600 text-white font-bold rounded-xl text-sm shadow-md flex items-center justify-center gap-1 active:scale-95 transition-transform">
+                          <AlertCircle size={16} /> 确认提交
+                       </button>
                   </div>
                   
                   <input type="file" ref={defectCameraRef} className="hidden" accept="image/*" capture="environment" onChange={(e) => handlePhotoUpload(e, 'defect')} />
@@ -755,8 +756,8 @@ export const CheckItem: React.FC<Props> = ({
 
                   <div>
                       <label className="text-xs font-bold text-slate-400 uppercase mb-1.5 block">整改照片</label>
-                      {/* Updated padding for X button overflow */}
-                      <div className="flex gap-3 mb-2 overflow-x-auto pt-4 pr-4 pl-1 pb-1">
+                      {/* Req 2: Updated padding for X button overflow */}
+                      <div className="flex gap-3 mb-2 overflow-x-auto pt-5 pr-5 pl-1 pb-1">
                           {rectifyPhotos.map((p, i) => (
                               <div key={i} className="relative w-16 h-16 shrink-0">
                                   <img src={p} className="w-full h-full object-cover rounded-lg border border-slate-200 shadow-sm" onClick={() => setPreviewImage(p)} />
@@ -785,7 +786,7 @@ export const CheckItem: React.FC<Props> = ({
           </PortalModal>
       )}
 
-      {/* --- MODAL 3: HISTORY --- */}
+      {/* --- MODAL 3: HISTORY (Req 6) --- */}
       {showHistoryModal && (
           <PortalModal onClose={() => setShowHistoryModal(false)}>
               <div className="bg-white rounded-2xl p-6 w-full shadow-2xl animate-in zoom-in duration-200 flex flex-col gap-4 max-h-[80vh]">
@@ -803,9 +804,11 @@ export const CheckItem: React.FC<Props> = ({
                           <div className="border-2 border-slate-200 rounded-xl p-3 bg-white">
                                <div className="flex justify-between items-center mb-2">
                                    <span className="bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded text-xs font-bold">当前状态</span>
-                                   <span className="text-xs text-slate-400">{entry.timestamp ? format(new Date(entry.timestamp), 'yyyy-MM-dd') : ''}</span>
+                                   {/* Req 6: HH:mm */}
+                                   <span className="text-xs text-slate-400">{entry.timestamp ? format(new Date(entry.timestamp), 'HH:mm') : ''}</span>
                                </div>
-                               <div className="text-sm font-bold text-slate-800 mb-1">Issue: <span className="text-red-600">{entry.issueNote || 'No Note'}</span></div>
+                               {/* Req 6: Translate Issue to 发现缺陷, and timestamp to HH:mm */}
+                               <div className="text-sm font-bold text-slate-800 mb-1">发现缺陷: <span className="text-red-600">{entry.issueNote || '无描述'}</span></div>
                                {entry.issuePhotos.length > 0 && (
                                    <div className="flex gap-2 overflow-x-auto mb-2">
                                        {entry.issuePhotos.map((p, i) => <img key={i} src={p} className="w-12 h-12 object-cover rounded border" onClick={() => setPreviewImage(p)}/>)}
@@ -813,7 +816,7 @@ export const CheckItem: React.FC<Props> = ({
                                )}
                                {entry.rectification && (
                                    <div className="text-sm font-bold text-slate-800 mt-2 pt-2 border-t border-slate-100">
-                                       Rectification: <span className="text-emerald-600">{entry.rectification.method}</span>
+                                       整改措施: <span className="text-emerald-600">{entry.rectification.method}</span>
                                        {entry.rectification.photos.length > 0 && (
                                            <div className="flex gap-2 overflow-x-auto mt-1">
                                                {entry.rectification.photos.map((p, i) => <img key={i} src={p} className="w-12 h-12 object-cover rounded border" onClick={() => setPreviewImage(p)}/>)}
@@ -829,13 +832,14 @@ export const CheckItem: React.FC<Props> = ({
                           <div key={i} className="border border-slate-100 rounded-xl p-3 bg-slate-50 opacity-80">
                                <div className="flex justify-between items-center mb-2">
                                    <span className="bg-slate-200 text-slate-500 px-2 py-0.5 rounded text-xs font-bold">历史记录 #{entry.history!.length - i}</span>
-                                   <span className="text-xs text-slate-400">{h.timestamp ? format(new Date(h.timestamp), 'yyyy-MM-dd') : ''}</span>
+                                   {/* Req 6: HH:mm */}
+                                   <span className="text-xs text-slate-400">{h.timestamp ? format(new Date(h.timestamp), 'HH:mm') : ''}</span>
                                </div>
-                               <div className="text-xs text-slate-600 mb-1"><span className="font-bold">Issue:</span> {h.issueNote}</div>
+                               <div className="text-xs text-slate-600 mb-1"><span className="font-bold">发现缺陷:</span> {h.issueNote || '无描述'}</div>
                                <div className="flex gap-1 overflow-x-auto mb-1">
                                    {h.issuePhotos.map((p, x) => <img key={x} src={p} className="w-8 h-8 object-cover rounded" onClick={() => setPreviewImage(p)}/>)}
                                </div>
-                               <div className="text-xs text-slate-600"><span className="font-bold">Fixed:</span> {h.rectification?.method}</div>
+                               <div className="text-xs text-slate-600"><span className="font-bold">整改:</span> {h.rectification?.method}</div>
                           </div>
                       ))}
                   </div>

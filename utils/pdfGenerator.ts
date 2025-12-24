@@ -1,3 +1,4 @@
+
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 import { AppState } from '../types';
@@ -35,19 +36,24 @@ export const generatePDF = async (
   const pdfWidth = pdf.internal.pageSize.getWidth();
   const pdfHeight = pdf.internal.pageSize.getHeight();
 
+  // Layout Constants (mm)
+  const headerHeight = 25; // Adjusted for header content
+  const footerHeight = 15; // Space for page number
+  const margin = 0; // Left/Right margin if needed, currently 0 for full width
+  
+  // Calculate printable area height
+  const printableHeight = pdfHeight - headerHeight - footerHeight;
+
   const imgProps = pdf.getImageProperties(imgData);
+  // Calculate the total height the image would take on PDF
   const pdfImgHeight = (imgProps.height * pdfWidth) / imgProps.width;
 
-  let heightLeft = pdfImgHeight;
-  let page = 1;
-
-  // Add first page
-  pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfImgHeight);
-  heightLeft -= pdfHeight;
+  // Calculate total pages needed
+  const totalPages = Math.ceil(pdfImgHeight / printableHeight);
 
   // Prepare header image if available
   let headerData: string | null = null;
-  let headerHeight = 0;
+  let headerImgHeight = 0;
 
   if (headerElement) {
       const headerCanvas = await html2canvas(headerElement, {
@@ -58,31 +64,56 @@ export const generatePDF = async (
       });
       headerData = headerCanvas.toDataURL('image/jpeg', 0.95);
       const headerProps = pdf.getImageProperties(headerData);
-      headerHeight = (headerProps.height * pdfWidth) / headerProps.width;
+      // Scale header to fit width, but constrain height
+      headerImgHeight = (headerProps.height * pdfWidth) / headerProps.width;
   }
 
-  while (heightLeft > 0) {
-    pdf.addPage();
-    // Calculate position to show the next chunk of the long image
-    // For page 2, we want to show from Y=297mm onwards.
-    // So we position the image at Y=-297mm.
-    const position = -(pdfHeight * page);
-    
-    pdf.addImage(imgData, 'JPEG', 0, position, pdfWidth, pdfImgHeight);
-
-    // Overlay header on top if it exists
-    if (headerData && headerHeight > 0) {
-        // Draw a white box behind header to ensure it covers content
-        pdf.setFillColor(255, 255, 255);
-        pdf.rect(0, 0, pdfWidth, headerHeight, 'F');
-        pdf.addImage(headerData, 'JPEG', 0, 0, pdfWidth, headerHeight);
+  for (let page = 1; page <= totalPages; page++) {
+    if (page > 1) {
+      pdf.addPage();
     }
+
+    // 1. Draw the Content Image
+    // The key is to shift the image up by (page - 1) * printableHeight
+    // AND shift it down by headerHeight so it starts after the header.
+    // The negative offset moves the "seen" part of the image into the view.
+    const yOffset = -(printableHeight * (page - 1)) + headerHeight;
     
-    heightLeft -= pdfHeight;
-    page++;
+    pdf.addImage(imgData, 'JPEG', margin, yOffset, pdfWidth, pdfImgHeight);
+
+    // 2. MASKING: Cover the overlap areas with white rectangles
+    // Mask Header Area (Top)
+    pdf.setFillColor(255, 255, 255);
+    pdf.rect(0, 0, pdfWidth, headerHeight, 'F');
+    
+    // Mask Footer Area (Bottom)
+    pdf.setFillColor(255, 255, 255);
+    pdf.rect(0, pdfHeight - footerHeight, pdfWidth, footerHeight, 'F');
+
+    // 3. Draw Header (on top of mask)
+    if (headerData && headerImgHeight > 0) {
+        // Center vertically in the header area if needed, or stick to top
+        pdf.addImage(headerData, 'JPEG', 0, 0, pdfWidth, headerImgHeight);
+    }
+
+    // 4. Draw Footer (Separator Line + Page Number)
+    const footerYStart = pdfHeight - footerHeight;
+    
+    // Separator Line
+    pdf.setDrawColor(0, 0, 0); // Black
+    pdf.setLineWidth(0.1); // Thin line
+    pdf.line(10, footerYStart, pdfWidth - 10, footerYStart); // Line with 10mm margin
+
+    // Page Number
+    pdf.setFontSize(9);
+    pdf.setTextColor(100, 100, 100); // Gray
+    const pageText = `Page ${page} of ${totalPages}`;
+    const textWidth = pdf.getTextWidth(pageText);
+    pdf.text(pageText, (pdfWidth / 2) - (textWidth / 2), pdfHeight - 5);
   }
 
-  const filename = `Report_B-${state.info.registration}_${state.info.date}.pdf`;
+  // Req 3: Filename change to include "B-" explicitly
+  const filename = `B-${state.info.registration}_${state.info.inspectorName}_finacheck_${state.info.date}.pdf`;
   const blob = pdf.output('blob');
   return new File([blob], filename, { type: 'application/pdf' });
 };

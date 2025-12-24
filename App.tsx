@@ -37,12 +37,23 @@ const REPORT_REQUIREMENTS = [
   "4、涉及门上工作，必须双人互检！"
 ];
 
-const APP_VERSION = 'v3.2.0';
+// Req 2: Version Update
+const APP_VERSION = 'v3.3.0';
 
 const CHANGELOGS = [
   {
-    version: 'v3.2.0',
+    version: 'v3.3.0',
     date: format(new Date(), 'yyyy-MM-dd'),
+    changes: [
+      '新增：完成整改后自动加入待回顾列表',
+      '优化：缺陷提交弹窗按钮布局调整',
+      '优化：历史记录全汉化，精确到时间',
+      '修复：批量分享按钮点击无效问题'
+    ]
+  },
+  {
+    version: 'v3.2.0',
+    date: '2025-12-24',
     changes: [
       '新增：回顾功能 (星标)，归入缺陷栏',
       '优化：术语统一为“缺陷”',
@@ -245,7 +256,7 @@ export default function App() {
   };
 
   const getStats = () => {
-    let total = 0, checked = 0, flagged = 0;
+    let total = 0, checked = 0, flagged = 0, starred = 0;
     CHECKLIST_DATA.forEach(section => {
       section.items.forEach(item => {
         if (item.type === 'simple') {
@@ -253,23 +264,28 @@ export default function App() {
           const entry = state.session[item.id];
           const st = entry?.status;
           if ((st === 'ok' || st === 'na') && !entry?.isStarred) checked++;
-          if (st === 'flagged' || entry?.isStarred) flagged++;
+          if (st === 'flagged') flagged++;
+          if (entry?.isStarred) starred++;
         } else {
           item.subItems?.forEach(sub => {
             total++;
             const entry = state.session[`${item.id}_${sub.id}`];
             const st = entry?.status;
             if ((st === 'ok' || st === 'na') && !entry?.isStarred) checked++;
-            if (st === 'flagged' || entry?.isStarred) flagged++;
+            if (st === 'flagged') flagged++;
+            if (entry?.isStarred) starred++;
           });
         }
       });
     });
-    const checkedPercent = total > 0 ? (checked / total) * 100 : 0;
-    const flaggedPercent = total > 0 ? (flagged / total) * 100 : 0;
-    const totalPercent = total > 0 ? ((checked + flagged) / total) * 100 : 0;
+    // Total issues for the red progress bar includes flagged and starred
+    const totalIssues = flagged + starred;
     
-    return { total, checked, flagged, checkedPercent, flaggedPercent, totalPercent };
+    const checkedPercent = total > 0 ? (checked / total) * 100 : 0;
+    const flaggedPercent = total > 0 ? (totalIssues / total) * 100 : 0;
+    const totalPercent = total > 0 ? ((checked + totalIssues) / total) * 100 : 0;
+    
+    return { total, checked, flagged, starred, totalIssues, checkedPercent, flaggedPercent, totalPercent };
   };
 
   const flattenItemsForReport = (section: SectionConfig) => {
@@ -411,6 +427,38 @@ export default function App() {
       return getRectifiedOrFlaggedItems().filter(i => state.session[i.uniqueId]?.status === 'flagged');
   };
 
+  // Helper to find section title for item
+  // Req 5: Remove ordinal (e.g., "一、")
+  const getSectionTitle = (id: string) => {
+    const section = CHECKLIST_DATA.find(s => 
+      s.items.some(i => 
+        i.id === id || (i.subItems && i.subItems.some(sub => `${i.id}_${sub.id}` === id))
+      )
+    );
+    if (!section) return '';
+    // Remove "一、", "1.", etc from start
+    return section.title.replace(/^[一二三四五六七八九十\d]+[、\.]\s*/, '').split('(')[0].trim();
+  };
+
+  // Req 4: Helper to find parent item label
+  const getParentLabel = (id: string) => {
+      // ID format is either "1_1" or "1_1_sub1"
+      // If it has 3 parts or came from a multi item, we need to find the parent.
+      // But based on my logic, subItems ids are like "2_16_L1".
+      // Let's iterate.
+      for (const section of CHECKLIST_DATA) {
+          for (const item of section.items) {
+              if (item.subItems) {
+                  const sub = item.subItems.find(s => `${item.id}_${s.id}` === id);
+                  if (sub) {
+                      return item.text; // Return the full parent text
+                  }
+              }
+          }
+      }
+      return null;
+  };
+
   const handleGeneratePDF = async () => {
       if (!printRef.current) return;
       setIsGenerating(true);
@@ -461,9 +509,14 @@ export default function App() {
 
         <div className="flex-1 w-full max-w-md flex flex-col justify-evenly py-2 min-h-[500px]">
             <div className="text-center space-y-4 pt-2 shrink-0">
-                <div className="bg-blue-600 w-20 h-20 rounded-2xl flex items-center justify-center mx-auto shadow-xl shadow-blue-200">
-                  <Plane size={42} className="text-white" />
+                {/* Req 2: App Icon Update - Paper Plane + Check */}
+                <div className="relative w-24 h-24 mx-auto">
+                    <Send size={80} className="text-emerald-500 -rotate-12 absolute top-0 left-0" strokeWidth={1.5} />
+                    <div className="absolute bottom-0 right-0 bg-white rounded-full p-1">
+                        <CheckCircle2 size={40} className="text-emerald-500 fill-white" />
+                    </div>
                 </div>
+                
                 <div>
                     <h1 className="text-3xl font-black tracking-tight text-slate-900">最终检查清单</h1>
                     <div className="flex items-center justify-center gap-2 mt-2">
@@ -584,25 +637,30 @@ export default function App() {
                 <div className="bg-red-500 h-full transition-all duration-500 ease-out" style={{width: `${stats.flaggedPercent}%`}} />
            </div>
            
+           {/* Req 3: Fix Batch Share Button & Split Defect/Review Label */}
            <div className="flex border-t border-slate-100 bg-white">
-             <button onClick={() => setFilterMode('all')} className={`flex-1 py-2.5 text-xs font-bold border-b-2 transition-colors ${filterMode === 'all' ? 'border-blue-500 text-blue-600' : 'border-transparent text-slate-400'}`}>全部</button>
-             <button onClick={() => setFilterMode('pending')} className={`flex-1 py-2.5 text-xs font-bold border-b-2 transition-colors ${filterMode === 'pending' ? 'border-blue-500 text-blue-600' : 'border-transparent text-slate-400'}`}>未检 ({stats.total - (stats.checked)})</button>
-             <button onClick={() => setFilterMode('flagged')} className={`flex-1 py-2.5 text-xs font-bold border-b-2 transition-all relative flex items-center justify-center gap-2 ${stats.flagged > 0 ? 'text-red-600 font-black' : 'text-slate-400'} ${filterMode === 'flagged' ? 'border-red-500' : 'border-transparent'}`}>
-                缺陷/回顾 ({stats.flagged})
-                {/* Batch Share Button in Tab Header */}
-                {stats.flagged > 0 && filterMode === 'flagged' && (
+             <div onClick={() => setFilterMode('all')} className={`flex-1 py-2.5 text-xs font-bold border-b-2 transition-colors cursor-pointer text-center ${filterMode === 'all' ? 'border-blue-500 text-blue-600' : 'border-transparent text-slate-400'}`}>全部</div>
+             <div onClick={() => setFilterMode('pending')} className={`flex-1 py-2.5 text-xs font-bold border-b-2 transition-colors cursor-pointer text-center ${filterMode === 'pending' ? 'border-blue-500 text-blue-600' : 'border-transparent text-slate-400'}`}>未检 ({stats.total - (stats.checked)})</div>
+             <div onClick={() => setFilterMode('flagged')} className={`flex-1 py-2.5 text-xs font-bold border-b-2 transition-all relative flex items-center justify-center gap-1 cursor-pointer ${filterMode === 'flagged' ? 'border-red-500' : 'border-transparent'}`}>
+                {/* Split Defect / Review Text */}
+                <span className={stats.flagged > 0 ? 'text-red-600' : 'text-slate-400'}>缺陷 {stats.flagged}</span>
+                <span className="text-slate-300 mx-0.5">/</span>
+                <span className={stats.starred > 0 ? 'text-yellow-500' : 'text-slate-400'}>回顾 {stats.starred}</span>
+                
+                {(stats.flagged > 0 || stats.starred > 0) && filterMode === 'flagged' && (
                     <div 
                        onClick={(e) => { e.stopPropagation(); handleShareIssues(); }}
-                       className="ml-1 p-1 bg-red-100 text-red-600 rounded-md active:scale-90 transition-transform shadow-sm"
+                       className="ml-2 p-1.5 bg-red-50 text-red-600 rounded-md active:scale-90 transition-transform shadow-sm cursor-pointer hover:bg-red-100"
                     >
                         <Share2 size={12} />
                     </div>
                 )}
-             </button>
+             </div>
            </div>
         </div>
         
         <div className="flex-1 overflow-hidden" onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
+          {/* ... existing tab content code ... */}
           <div className="tabs-container" style={{ transform: `translateX(-${tabIndex * 33.333}%)` }}>
             {['all', 'pending', 'flagged'].map((mode) => (
               <div key={mode} className="tab-pane p-3 space-y-6 overflow-y-auto max-h-[calc(100vh-140px)] pb-24">
@@ -689,6 +747,8 @@ export default function App() {
             ))}
           </div>
         </div>
+        
+        {/* Footer Buttons */}
         <div className="fixed bottom-0 left-0 w-full bg-white border-t border-slate-200 p-4 pb-6 px-6 z-40 flex gap-4 shadow-xl">
            <button onClick={() => setShowResetConfirm(true)} className="w-12 h-12 flex items-center justify-center rounded-xl bg-red-50 text-red-500 border border-red-100"><Trash2 size={22} /></button>
            {isAdmin && (
@@ -702,6 +762,7 @@ export default function App() {
     );
   }
 
+  // ... (Sign Screen Logic - same as before) ...
   if (state.step === 'sign') {
     const stats = getStats();
     const allFlatItems = CHECKLIST_DATA.map(s => flattenItemsForReport(s)).flat();
@@ -709,13 +770,7 @@ export default function App() {
         const s = state.session[item.uniqueId];
         return (s?.status || 'unchecked') === 'unchecked';
     });
-    // Flagged for sign check now includes Starred items because they need review!
     const flaggedItems = getItemsForBatchShare(); 
-    // Wait, getItemsForBatchShare only filters status==='flagged' currently.
-    // For signing, we should block if there are flagged OR starred items?
-    // "Review" items are not technically blockers for signing unless process requires them cleared.
-    // Assuming Starred items are meant to be cleared (unstarred) before signing? Or just informational?
-    // User said "归为待处理项目类" (Classify as pending category). Pending usually blocks signing completion check.
     
     const starredItems = allFlatItems.filter(item => state.session[item.uniqueId]?.isStarred);
 
@@ -726,6 +781,7 @@ export default function App() {
 
     return (
        <div className="min-h-screen bg-slate-100 flex flex-col">
+         {/* ... Signature Overlay ... */}
          {showSignatureOverlay && (
            <div className="fixed inset-0 z-[100] bg-white flex flex-col">
               <div className="absolute top-4 left-6 z-10 flex flex-col gap-2">
@@ -741,6 +797,8 @@ export default function App() {
               </div>
            </div>
          )}
+         
+         {/* ... Main Sign Screen Content ... */}
          <div className="flex-1 overflow-y-auto pb-24">
             <div className="sticky top-0 z-20 bg-white border-b border-slate-200 px-6 py-4 flex justify-between items-center shadow-sm">
                  <h2 className="text-xl font-bold text-slate-800">签署报告</h2>
@@ -760,12 +818,13 @@ export default function App() {
                                        <h3 className="flex items-center gap-2 text-red-600 font-black text-sm uppercase tracking-wider">
                                            <AlertTriangle size={16} /> 存在缺陷 / 回顾
                                        </h3>
+                                       {/* Share Issues Button */}
                                        <button 
                                           onClick={handleShareIssues} 
                                           data-html2canvas-ignore
                                           className="flex items-center gap-1.5 text-xs font-bold bg-red-50 text-red-600 px-3 py-1.5 rounded-lg border border-red-100 active:scale-95 transition-all shadow-sm"
                                        >
-                                           <Share2 size={14}/> 生成图片分享
+                                           <Share2 size={14}/> 分享缺陷——>整改
                                        </button>
                                    </div>
                                    
@@ -872,6 +931,7 @@ export default function App() {
                )}
             </div>
          </div>
+         {/* Footer Buttons for Sign Step */}
          <div className="fixed bottom-0 left-0 w-full bg-white border-t border-slate-200 p-4 pb-6 px-6 z-40 flex gap-4">
              <button onClick={() => setStep('inspect')} className="px-6 py-4 rounded-xl font-bold bg-slate-100 text-slate-600">返回</button>
              <button disabled={(!isAdmin && (!canSign || !state.signature || !state.selfie)) || isGenerating} onClick={handleGeneratePDF} className={`flex-1 rounded-xl font-bold text-white shadow-xl flex items-center justify-center gap-2 ${(canSign && state.signature && state.selfie) || isAdmin ? (isAdmin ? 'bg-indigo-600' : 'bg-blue-600') : 'bg-slate-300'}`}>
@@ -1077,10 +1137,11 @@ export default function App() {
              ref={allIssuesExportRef} 
              style={{ display: 'none', position: 'absolute', top: 0, left: 0, width: '600px', backgroundColor: '#f8fafc', padding: '40px', borderRadius: '24px', zIndex: -1 }}
          >
-             <div className="border-b-4 border-slate-900 pb-6 mb-8 flex items-end justify-between">
+             {/* Req 4: Report Title Change to "Defect Report" (Red) */}
+             <div className="bg-red-600 px-8 py-6 mb-8 flex items-end justify-between rounded-3xl shadow-lg">
                 <div>
-                   <h2 className="text-4xl font-black text-slate-900 leading-none">发现报告</h2>
-                   <div className="text-base font-bold text-slate-500 uppercase tracking-[0.3em] mt-2">FINDING REPORT</div>
+                   <h2 className="text-4xl font-black text-white leading-none tracking-tight">缺陷报告</h2>
+                   <div className="text-sm font-bold text-red-100 uppercase tracking-[0.4em] mt-2 opacity-90">DEFECT REPORT</div>
                 </div>
              </div>
              
@@ -1091,12 +1152,37 @@ export default function App() {
              </div>
 
              <div className="space-y-12">
-                 {getItemsForBatchShare().map((item, idx) => {
+                 {(() => {
+                    let lastSectionTitle = '';
+                    return getItemsForBatchShare().map((item, idx) => {
                      const entry = state.session[item.uniqueId];
+                     const sectionTitle = getSectionTitle(item.uniqueId);
+                     const parentLabel = getParentLabel(item.uniqueId); // Req 4: Get Parent Item Label
+                     
+                     const showSectionHeader = sectionTitle !== lastSectionTitle;
+                     if (showSectionHeader) lastSectionTitle = sectionTitle;
+
                      return (
                          <div key={item.uniqueId} className="break-inside-avoid">
+                             {/* Req 5: Section Location Header */}
+                             {showSectionHeader && (
+                                 <div className="mb-6 mt-8 border-b-2 border-slate-200 pb-2">
+                                     <span className="inline-block px-4 py-1.5 rounded-lg bg-slate-200 text-slate-600 font-black text-sm shadow-sm">
+                                         {sectionTitle}
+                                     </span>
+                                 </div>
+                             )}
+
                              <div className="bg-white border-l-[16px] border-red-500 pl-8 py-6 mb-6 rounded-r-3xl shadow-xl border-y border-r border-slate-200">
                                 <div className="text-xs font-bold text-red-400 uppercase mb-2 tracking-wider">Finding #{idx + 1}</div>
+                                
+                                {/* Req 4: Display Parent Label clearly if it exists */}
+                                {parentLabel && (
+                                    <div className="mb-3 text-lg font-bold text-slate-800 leading-tight">
+                                        {cleanText(parentLabel)}
+                                    </div>
+                                )}
+
                                 {item.subLabel && (
                                     <div className="mb-4">
                                         <span className="inline-block bg-slate-900 text-white text-xl font-black px-4 py-1.5 rounded-lg shadow-sm uppercase">
@@ -1141,7 +1227,8 @@ export default function App() {
                              {idx < getItemsForBatchShare().length - 1 && <div className="border-b-4 border-slate-200 my-10"></div>}
                          </div>
                      );
-                 })}
+                 });
+                 })()}
              </div>
              
              <div className="mt-16 pt-8 border-t-2 border-slate-200 flex justify-between items-center text-slate-400 text-xs font-bold uppercase tracking-wide">
