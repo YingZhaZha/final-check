@@ -142,16 +142,22 @@ export const CheckItem: React.FC<Props> = ({
   const startLongPress = () => {
     if (status !== 'unchecked') return; 
     
-    // Range Validation Logic
-    if (pressureType === 'range' && entry?.value !== 'GREEN') {
-        setShowRangeAlert(true);
-        return;
-    }
-
+    // Moved validation INSIDE the timeout.
+    // This ensures scrolling (which cancels the timeout) doesn't trigger the alert.
+    
     longPressTriggered.current = false;
     setIsPressing(true);
     longPressTimer.current = window.setTimeout(() => {
       longPressTriggered.current = true;
+      
+      // Validation happens here (after hold duration)
+      if (pressureType === 'range' && entry?.value !== 'GREEN') {
+         setIsPressing(false);
+         setShowRangeAlert(true);
+         if (navigator.vibrate) navigator.vibrate(200); // Error vibration
+         return;
+      }
+
       handleCommitOk();
       setIsPressing(false);
       if (navigator.vibrate) navigator.vibrate([40, 30, 40]);
@@ -775,6 +781,73 @@ export const CheckItem: React.FC<Props> = ({
                       </button>
                   </div>
                   <input type="file" ref={rectifyCameraRef} className="hidden" accept="image/*" capture="environment" onChange={(e) => handlePhotoUpload(e, 'rectify')} />
+              </div>
+          </PortalModal>
+      )}
+
+      {/* --- MODAL 3: HISTORY --- */}
+      {showHistoryModal && (
+          <PortalModal onClose={() => setShowHistoryModal(false)}>
+              <div className="bg-white rounded-2xl p-6 w-full shadow-2xl animate-in zoom-in duration-200 flex flex-col gap-4 max-h-[80vh]">
+                  <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                      <div className="flex items-center gap-2 text-slate-800">
+                          <HistoryIcon className="w-6 h-6" />
+                          <h3 className="text-xl font-bold text-slate-900">检查记录历史</h3>
+                      </div>
+                      <button onClick={() => setShowHistoryModal(false)} className="p-1 bg-slate-100 rounded-full text-slate-500"><X size={20}/></button>
+                  </div>
+                  
+                  <div className="overflow-y-auto flex-1 space-y-4 pr-1">
+                      {/* Current Active Record */}
+                      {(entry?.rectification || status === 'flagged') && (
+                          <div className="border-2 border-slate-200 rounded-xl p-3 bg-white">
+                               <div className="flex justify-between items-center mb-2">
+                                   <span className="bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded text-xs font-bold">当前状态</span>
+                                   <span className="text-xs text-slate-400">{entry.timestamp ? format(new Date(entry.timestamp), 'yyyy-MM-dd') : ''}</span>
+                               </div>
+                               <div className="text-sm font-bold text-slate-800 mb-1">Issue: <span className="text-red-600">{entry.issueNote || 'No Note'}</span></div>
+                               {entry.issuePhotos.length > 0 && (
+                                   <div className="flex gap-2 overflow-x-auto mb-2">
+                                       {entry.issuePhotos.map((p, i) => <img key={i} src={p} className="w-12 h-12 object-cover rounded border" onClick={() => setPreviewImage(p)}/>)}
+                                   </div>
+                               )}
+                               {entry.rectification && (
+                                   <div className="text-sm font-bold text-slate-800 mt-2 pt-2 border-t border-slate-100">
+                                       Rectification: <span className="text-emerald-600">{entry.rectification.method}</span>
+                                       {entry.rectification.photos.length > 0 && (
+                                           <div className="flex gap-2 overflow-x-auto mt-1">
+                                               {entry.rectification.photos.map((p, i) => <img key={i} src={p} className="w-12 h-12 object-cover rounded border" onClick={() => setPreviewImage(p)}/>)}
+                                           </div>
+                                       )}
+                                   </div>
+                               )}
+                          </div>
+                      )}
+
+                      {/* History List */}
+                      {entry?.history?.map((h, i) => (
+                          <div key={i} className="border border-slate-100 rounded-xl p-3 bg-slate-50 opacity-80">
+                               <div className="flex justify-between items-center mb-2">
+                                   <span className="bg-slate-200 text-slate-500 px-2 py-0.5 rounded text-xs font-bold">历史记录 #{entry.history!.length - i}</span>
+                                   <span className="text-xs text-slate-400">{h.timestamp ? format(new Date(h.timestamp), 'yyyy-MM-dd') : ''}</span>
+                               </div>
+                               <div className="text-xs text-slate-600 mb-1"><span className="font-bold">Issue:</span> {h.issueNote}</div>
+                               <div className="flex gap-1 overflow-x-auto mb-1">
+                                   {h.issuePhotos.map((p, x) => <img key={x} src={p} className="w-8 h-8 object-cover rounded" onClick={() => setPreviewImage(p)}/>)}
+                               </div>
+                               <div className="text-xs text-slate-600"><span className="font-bold">Fixed:</span> {h.rectification?.method}</div>
+                          </div>
+                      ))}
+                  </div>
+
+                  <div className="pt-2">
+                      <button 
+                        onClick={() => { setShowHistoryModal(false); setTimeout(() => handleMarkDefect(), 200); }} 
+                        className="w-full py-3 bg-red-50 text-red-600 border border-red-100 font-bold rounded-xl flex items-center justify-center gap-2"
+                      >
+                         <AlertTriangle size={16} /> 再次标记缺陷
+                      </button>
+                  </div>
               </div>
           </PortalModal>
       )}
