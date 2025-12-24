@@ -824,7 +824,7 @@ export default function App() {
                                           data-html2canvas-ignore
                                           className="flex items-center gap-1.5 text-xs font-bold bg-red-50 text-red-600 px-3 py-1.5 rounded-lg border border-red-100 active:scale-95 transition-all shadow-sm"
                                        >
-                                           <Share2 size={14}/> 分享缺陷——>整改
+                                           <Share2 size={14}/> 分享缺陷→整改
                                        </button>
                                    </div>
                                    
