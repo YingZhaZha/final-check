@@ -1,7 +1,10 @@
-import React, { useState, useRef } from 'react';
-import { Check, AlertTriangle, Camera, ChevronDown, ChevronUp, Image as ImageIcon, Share2, Trash2, X } from 'lucide-react';
-import { CheckEntry, ItemStatus } from '../types';
+
+import React, { useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
+import { Check, AlertTriangle, Camera, ChevronDown, ChevronUp, Image as ImageIcon, Share2, Trash2, X, Wrench, RotateCcw, AlertCircle, History as HistoryIcon, ArrowRight, Star } from 'lucide-react';
+import { CheckEntry, ItemStatus, HistoryEntry } from '../types';
 import html2canvas from 'html2canvas';
+import { format } from 'date-fns';
 
 interface Props {
   uniqueId: string;
@@ -16,7 +19,36 @@ interface Props {
   info: { registration: string; inspectorName: string; date: string };
 }
 
-// 图片压缩工具函数
+// Portal Component to fix z-index/transform issues
+const PortalModal: React.FC<{ children: React.ReactNode; onClose: () => void }> = ({ children, onClose }) => {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    setMounted(true);
+    return () => setMounted(false);
+  }, []);
+  if (!mounted) return null;
+  return createPortal(
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-slate-900/90 backdrop-blur-sm animate-in fade-in duration-200" onClick={onClose}>
+      <div onClick={e => e.stopPropagation()} className="w-full max-w-sm relative">
+        {children}
+      </div>
+    </div>,
+    document.body
+  );
+};
+
+// Image Preview Modal
+const ImagePreviewModal: React.FC<{ src: string | null; onClose: () => void }> = ({ src, onClose }) => {
+    if (!src) return null;
+    return createPortal(
+        <div className="fixed inset-0 z-[10000] bg-black/95 flex items-center justify-center p-2 animate-in fade-in duration-200" onClick={onClose}>
+            <button className="absolute top-4 right-4 text-white p-2 bg-white/20 rounded-full"><X size={24}/></button>
+            <img src={src} className="max-w-full max-h-full object-contain rounded-lg" onClick={e => e.stopPropagation()} />
+        </div>,
+        document.body
+    );
+};
+
 const compressImage = (file: File): Promise<string> => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -25,11 +57,9 @@ const compressImage = (file: File): Promise<string> => {
       const img = new Image();
       img.src = event.target?.result as string;
       img.onload = () => {
-        // 提升分辨率限制：从 1024 -> 1600，保证照片细节
         let width = img.width;
         let height = img.height;
-        const maxDimension = 1600;
-
+        const maxDimension = 1200; 
         if (width > height) {
           if (width > maxDimension) {
             height = Math.round((height * maxDimension) / width);
@@ -41,17 +71,15 @@ const compressImage = (file: File): Promise<string> => {
             height = maxDimension;
           }
         }
-
         const canvas = document.createElement('canvas');
         canvas.width = width;
         canvas.height = height;
         const ctx = canvas.getContext('2d');
         if (ctx) {
-            ctx.fillStyle = '#FFFFFF'; // 防止透明背景变黑
+            ctx.fillStyle = '#FFFFFF';
             ctx.fillRect(0, 0, width, height);
             ctx.drawImage(img, 0, 0, width, height);
-            // 提升压缩质量：从 0.6 -> 0.8，减少照片本身的噪点
-            resolve(canvas.toDataURL('image/jpeg', 0.8));
+            resolve(canvas.toDataURL('image/jpeg', 0.7)); 
         } else {
             reject(new Error("Canvas context failed"));
         }
@@ -66,27 +94,64 @@ export const CheckItem: React.FC<Props> = ({
   uniqueId, label, subLabel, requiresInput, inputLabel, pressureType, entry, onUpdate, isSubItem, info
 }) => {
   const status: ItemStatus = entry?.status || 'unchecked';
+  const isStarred = entry?.isStarred || false;
   const [showTools, setShowTools] = useState(false);
+  
+  // Modals
+  const [showDefectModal, setShowDefectModal] = useState(false);
+  const [showRectifyModal, setShowRectifyModal] = useState(false);
+  const [showHistoryModal, setShowHistoryModal] = useState(false);
+  const [showRangeAlert, setShowRangeAlert] = useState(false); // Validation alert
+  const [previewImage, setPreviewImage] = useState<string | null>(null);
+  
+  // Temp State for Defect Modal
+  const [defectNote, setDefectNote] = useState('');
+  const [defectPhotos, setDefectPhotos] = useState<string[]>([]);
+  
+  // Temp State for Rectify Modal
+  const [rectifyMethod, setRectifyMethod] = useState('');
+  const [rectifyPhotos, setRectifyPhotos] = useState<string[]>([]);
+
   const [isSharing, setIsSharing] = useState(false);
-  const [isCompressing, setIsCompressing] = useState(false); // 压缩状态
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isCompressing, setIsCompressing] = useState(false);
+  
+  const defectCameraRef = useRef<HTMLInputElement>(null);
+  const rectifyCameraRef = useRef<HTMLInputElement>(null);
+  const normalCameraRef = useRef<HTMLInputElement>(null);
   const shareCardRef = useRef<HTMLDivElement>(null);
+  
   const longPressTimer = useRef<number | null>(null);
   const touchStartPos = useRef<{ x: number, y: number } | null>(null);
   const [isPressing, setIsPressing] = useState(false);
+  const longPressTriggered = useRef(false);
 
-  // --- 核心逻辑 ---
+  // --- Logic Helpers ---
+
+  const initDefectState = () => {
+    setDefectNote(entry?.issueNote || '');
+    setDefectPhotos(entry?.issuePhotos || []);
+  };
+
+  const initRectifyState = () => {
+    setRectifyMethod(entry?.rectification?.method || '');
+    setRectifyPhotos(entry?.rectification?.photos || []);
+  };
+
+  // --- Handlers ---
 
   const startLongPress = () => {
     if (status !== 'unchecked') return; 
     
+    // Range Validation Logic
     if (pressureType === 'range' && entry?.value !== 'GREEN') {
-      if (navigator.vibrate) navigator.vibrate(100);
-      return;
+        setShowRangeAlert(true);
+        return;
     }
 
+    longPressTriggered.current = false;
     setIsPressing(true);
     longPressTimer.current = window.setTimeout(() => {
+      longPressTriggered.current = true;
       handleCommitOk();
       setIsPressing(false);
       if (navigator.vibrate) navigator.vibrate([40, 30, 40]);
@@ -110,12 +175,9 @@ export const CheckItem: React.FC<Props> = ({
 
   const handleTouchMove = (e: React.TouchEvent) => {
     if (!longPressTimer.current || !touchStartPos.current) return;
-    
-    // 如果移动超过 10px，则认为是滑动，取消长按
     const moveThreshold = 10;
     const diffX = Math.abs(e.touches[0].clientX - touchStartPos.current.x);
     const diffY = Math.abs(e.touches[0].clientY - touchStartPos.current.y);
-    
     if (diffX > moveThreshold || diffY > moveThreshold) {
       cancelLongPress();
     }
@@ -123,13 +185,27 @@ export const CheckItem: React.FC<Props> = ({
 
   const handleMainButtonClick = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (status !== 'unchecked') {
-      if (status === 'flagged' && pressureType === 'range' && entry?.value !== 'GREEN' && entry?.value) {
-        alert("检测到气压异常，请先将压力标记为 GREEN 后再取消标记。");
+
+    // Prevent click processing if long press was just triggered
+    if (longPressTriggered.current) {
+        longPressTriggered.current = false;
         return;
-      }
-      onUpdate(uniqueId, { status: 'unchecked', timestamp: null });
-      if (navigator.vibrate) navigator.vibrate(30);
+    }
+
+    if (status === 'unchecked') {
+        // Disabled click to check. Long press ONLY.
+        // handleCommitOk(); 
+    } else if (status === 'flagged') {
+        // Click on Flagged -> Go to Rectify
+        initRectifyState();
+        setShowRectifyModal(true);
+    } else if (status === 'ok') {
+        // Click on OK -> ALWAYS Reset to unchecked (Cancel mark)
+        // Even if it has history, we reset. History is accessible via the text badge.
+        onUpdate(uniqueId, { status: 'unchecked', timestamp: null });
+        if (navigator.vibrate) navigator.vibrate(30);
+    } else if (status === 'na') {
+        onUpdate(uniqueId, { status: 'unchecked', timestamp: null });
     }
   };
 
@@ -141,43 +217,129 @@ export const CheckItem: React.FC<Props> = ({
     onUpdate(uniqueId, { status: 'ok', timestamp: new Date().toISOString() });
   };
 
+  const handleStarClick = (e: React.MouseEvent) => {
+      e.stopPropagation();
+      const newStarState = !isStarred;
+      onUpdate(uniqueId, { isStarred: newStarState });
+  };
+
+  // --- Modal Workflow Handlers ---
+
+  const handleMarkDefect = () => {
+    // If previously rectified, archive the old one before starting new
+    if (entry?.rectification) {
+        archiveCurrentToHistory();
+    } else {
+        initDefectState(); // Load existing if re-opening
+    }
+    setShowDefectModal(true);
+  };
+
+  const handleDefectConfirm = (jumpToRectify: boolean) => {
+      onUpdate(uniqueId, {
+          status: 'flagged',
+          timestamp: new Date().toISOString(),
+          issueNote: defectNote,
+          issuePhotos: defectPhotos,
+          rectification: undefined 
+      });
+      setShowDefectModal(false);
+      
+      if (jumpToRectify) {
+          setRectifyMethod('');
+          setRectifyPhotos([]);
+          setTimeout(() => setShowRectifyModal(true), 200);
+      }
+  };
+
+  const handleRectifySubmit = () => {
+      onUpdate(uniqueId, { 
+          status: 'ok', 
+          timestamp: new Date().toISOString(),
+          rectification: {
+              method: rectifyMethod || '已现场整改',
+              photos: rectifyPhotos,
+              timestamp: new Date().toISOString()
+          }
+      });
+      setShowRectifyModal(false);
+  };
+
+  const handleRevokeDefect = () => {
+      if (window.confirm("确定是误报吗？这将清除当前缺陷记录。")) {
+          onUpdate(uniqueId, {
+              status: 'unchecked',
+              timestamp: null,
+              issueNote: undefined,
+              issuePhotos: [],
+              rectification: undefined
+          });
+          setShowRectifyModal(false);
+      }
+  };
+
+  const archiveCurrentToHistory = () => {
+      if (!entry) return;
+      const newHistoryItem: HistoryEntry = {
+          id: Date.now().toString(),
+          timestamp: entry.timestamp || new Date().toISOString(),
+          issueNote: entry.issueNote || '',
+          issuePhotos: entry.issuePhotos || [],
+          rectification: entry.rectification
+      };
+      
+      const currentHistory = entry.history || [];
+      onUpdate(uniqueId, {
+          history: [newHistoryItem, ...currentHistory],
+          issueNote: '',
+          issuePhotos: [],
+          rectification: undefined
+      });
+      setDefectNote('');
+      setDefectPhotos([]);
+  };
+
   const handleRangeSelect = (color: string) => {
     let newStatus = status;
     if (color === 'RED' || color === 'YELLOW') {
       newStatus = 'flagged';
+      setTimeout(() => handleMarkDefect(), 100);
     } else if (color === 'GREEN') {
       if (status === 'flagged') newStatus = 'unchecked';
     }
     onUpdate(uniqueId, { value: color, status: newStatus, timestamp: new Date().toISOString() });
   };
 
-  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  // --- Photo Handling ---
+
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>, target: 'defect' | 'rectify' | 'normal') => {
     if (e.target.files && e.target.files[0]) {
       setIsCompressing(true);
       try {
-        // 使用压缩函数处理图片
         const compressedBase64 = await compressImage(e.target.files[0]);
-        const currentPhotos = entry?.photos || [];
-        onUpdate(uniqueId, { photos: [...currentPhotos, compressedBase64] });
+        if (target === 'defect') {
+            setDefectPhotos(prev => [...prev, compressedBase64]);
+        } else if (target === 'rectify') {
+            setRectifyPhotos(prev => [...prev, compressedBase64]);
+        } else if (target === 'normal') {
+            onUpdate(uniqueId, { photos: [...(entry?.photos || []), compressedBase64] });
+        }
       } catch (error) {
-        console.error("Image compression failed:", error);
-        alert("图片处理失败，请重试");
+        alert("图片处理失败");
       } finally {
         setIsCompressing(false);
-        if (e.target) e.target.value = ''; // 重置 input
+        if (e.target) e.target.value = '';
       }
     }
   };
 
-  const handleRemovePhoto = (index: number) => {
-    if (window.confirm('删除这张照片?')) {
-      const currentPhotos = entry?.photos || [];
-      const newPhotos = currentPhotos.filter((_, i) => i !== index);
-      onUpdate(uniqueId, { photos: newPhotos });
-    }
+  const removeNormalPhoto = (idx: number) => {
+    if (!entry?.photos) return;
+    const newPhotos = entry.photos.filter((_, i) => i !== idx);
+    onUpdate(uniqueId, { photos: newPhotos });
   };
 
-  // 等待图片加载 helper
+  // --- Share Logic ---
   const waitForImages = (element: HTMLElement) => {
     const imgs = element.querySelectorAll('img');
     return Promise.all(Array.from(imgs).map(img => {
@@ -189,40 +351,28 @@ export const CheckItem: React.FC<Props> = ({
     }));
   };
 
-  const handleShareItem = async () => {
+  const handleShareDefect = async () => {
     if (!shareCardRef.current) return;
     setIsSharing(true);
-    
-    // 临时显示隐藏的 div 以便渲染
-    shareCardRef.current.style.display = 'block';
+    const card = shareCardRef.current;
+    card.style.display = 'block';
 
     try {
-        // 确保所有图片加载完毕
-        await waitForImages(shareCardRef.current);
-        // 额外等待一下渲染
+        await waitForImages(card);
         await new Promise(resolve => setTimeout(resolve, 300));
-
-        const canvas = await html2canvas(shareCardRef.current, {
-            scale: 2.0, // 提升单项分享清晰度
-            useCORS: true,
-            backgroundColor: '#f8fafc' // 使用浅灰色背景
-        });
-
+        const canvas = await html2canvas(card, { scale: 2.0, useCORS: true, backgroundColor: '#f8fafc' });
         canvas.toBlob(async (blob) => {
             if (!blob) return;
-            const filename = `Issue_${uniqueId}_B-${info.registration}.jpg`; // 改为 jpg
+            const filename = `Defect_${uniqueId}_B-${info.registration}.jpg`;
             const file = new File([blob], filename, { type: 'image/jpeg' });
-
             if (navigator.canShare && navigator.canShare({ files: [file] })) {
                 try {
                     await navigator.share({
                         files: [file],
-                        title: `Finding Report: ${label}`,
-                        text: `Finding reported on B-${info.registration}: ${label}`
+                        title: `缺陷报告: ${label}`,
+                        text: `缺陷报告 B-${info.registration}: ${label}`
                     });
-                } catch (e) {
-                    // 用户取消分享
-                }
+                } catch (e) {}
             } else {
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
@@ -232,12 +382,11 @@ export const CheckItem: React.FC<Props> = ({
                 URL.revokeObjectURL(url);
             }
             setIsSharing(false);
-            shareCardRef.current!.style.display = 'none'; // 恢复隐藏
-        }, 'image/jpeg', 0.85); // 提升单项分享质量到 0.85
+            card.style.display = 'none';
+        }, 'image/jpeg', 0.85);
     } catch (e) {
-        console.error(e);
         setIsSharing(false);
-        shareCardRef.current!.style.display = 'none';
+        card.style.display = 'none';
         alert("生成分享图片失败");
     }
   };
@@ -256,268 +405,478 @@ export const CheckItem: React.FC<Props> = ({
       case 'ok': 
       case 'na': return 'border-emerald-500 bg-emerald-50/20';
       case 'flagged': return 'border-red-500 bg-red-50';
-      default: return 'border-blue-500 bg-white'; // Default to blue to match multi-item cards
+      default: return 'border-blue-500 bg-white';
     }
   };
 
-  const canManualToggleFlag = pressureType === 'range' ? (entry?.value === 'GREEN' || !entry?.value) : true;
+  const hasHistory = (entry?.history && entry.history.length > 0) || entry?.rectification;
 
   return (
-    <div className={`relative transition-all duration-300 overflow-hidden ${isSubItem ? 'rounded-xl border shadow-sm' : 'mb-4 rounded-2xl border-l-[6px] shadow-sm'} ${getBorderColor()}`}>
-      <div className={`flex items-stretch ${isSubItem ? 'min-h-[4.5rem]' : 'min-h-[5rem]'}`}>
-        
-        {/* 内容显示区 */}
-        <div 
-          onMouseDown={(e) => { e.stopPropagation(); startLongPress(); }}
-          onMouseUp={cancelLongPress}
-          onMouseLeave={cancelLongPress}
-          onTouchStart={handleTouchStart}
-          onTouchMove={handleTouchMove}
-          onTouchEnd={cancelLongPress}
-          className={`flex-1 p-3.5 pl-4 flex items-center select-none transition-colors relative
-            ${isPressing ? 'bg-emerald-50' : ''}`}
-        >
-          {isPressing && <div className="absolute inset-0 bg-emerald-500/5 animate-pulse" />}
+    <>
+      <ImagePreviewModal src={previewImage} onClose={() => setPreviewImage(null)} />
+      
+      {showRangeAlert && (
+          <PortalModal onClose={() => setShowRangeAlert(false)}>
+            <div className="bg-white rounded-2xl p-6 shadow-2xl w-full max-w-xs text-center animate-in zoom-in duration-200">
+               <div className="mx-auto w-16 h-16 bg-red-50 text-red-500 rounded-full flex items-center justify-center mb-4">
+                  <AlertTriangle size={32} />
+               </div>
+               <div className="text-lg font-bold text-slate-800 mb-6 leading-relaxed">
+                 请先标记作动筒气瓶范围为<br/><span className="text-emerald-500 font-black text-2xl">绿色</span>
+               </div>
+               <button onClick={() => setShowRangeAlert(false)} className="w-full bg-slate-100 py-3 rounded-xl font-bold text-slate-600 active:bg-slate-200 transition-colors">知道了</button>
+            </div>
+          </PortalModal>
+      )}
+
+      <div className={`relative transition-all duration-300 overflow-hidden ${isSubItem ? 'rounded-xl border shadow-sm' : 'mb-4 rounded-2xl border-l-[6px] shadow-sm'} ${getBorderColor()}`}>
+        <div className={`flex items-stretch ${isSubItem ? 'min-h-[4.5rem]' : 'min-h-[5rem]'}`}>
           
-          <div className="flex-1 flex items-center justify-between gap-2">
-            <div className="flex-1">
-               {subLabel && <span className="inline-block px-1.5 py-0.5 rounded text-[9px] font-black bg-slate-200 text-slate-500 mb-1 uppercase tracking-tight">{subLabel}</span>}
+          {/* Content Area */}
+          <div 
+            onMouseDown={(e) => { e.stopPropagation(); startLongPress(); }}
+            onMouseUp={cancelLongPress}
+            onMouseLeave={cancelLongPress}
+            onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
+            onTouchEnd={cancelLongPress}
+            className={`flex-1 p-3.5 pl-4 flex items-center select-none transition-colors relative
+              ${isPressing ? 'bg-emerald-50' : ''}`}
+          >
+            {isPressing && <div className="absolute inset-0 bg-emerald-500/5 animate-pulse" />}
+            
+            <div className="flex-1 flex flex-col justify-center gap-1.5">
+               {subLabel && <span className="inline-block self-start px-1.5 py-0.5 rounded text-[9px] font-black bg-slate-200 text-slate-500 uppercase tracking-tight">{subLabel}</span>}
+               
                <div className={`font-bold leading-tight transition-colors ${isSubItem ? 'text-sm' : 'text-[16px]'} ${status === 'ok' || status === 'na' ? 'text-emerald-900' : status === 'flagged' ? 'text-red-900' : 'text-slate-800'}`}>
                  {label}
                </div>
 
-               {((entry?.photos?.length || 0) > 0 || entry?.issueNote) && (
-                 <div className="flex items-center gap-2 mt-1.5">
-                   {entry?.photos?.length ? (
+               {/* Interaction Badges Row */}
+               <div className="flex items-center flex-wrap gap-2 mt-1" onClick={e => e.stopPropagation()}>
+                  
+                  {/* Status Badges - Review Badge Moved to First */}
+                  {isStarred && (
+                      <button onClick={handleStarClick} className="flex items-center gap-1 px-2 py-1 rounded-md border border-yellow-200 bg-yellow-50 text-yellow-600 text-[10px] font-bold">
+                          <Star size={10} fill="currentColor" /> 待回顾
+                      </button>
+                  )}
+
+                  {status === 'flagged' && (
+                      <button onClick={() => { initDefectState(); setShowDefectModal(true); }} className="flex items-center gap-1 px-2 py-1 rounded-md border border-red-200 bg-red-50 text-red-600 text-[10px] font-bold animate-pulse-red-bg">
+                          <AlertCircle size={10} /> 查看缺陷
+                      </button>
+                  )}
+
+                  {status === 'ok' && hasHistory && (
+                      <button onClick={() => setShowHistoryModal(true)} className="flex items-center gap-1 px-2 py-1 rounded-md border border-emerald-200 bg-emerald-50 text-emerald-600 text-[10px] font-bold">
+                          <HistoryIcon size={10} /> 已整改
+                      </button>
+                  )}
+
+                  {/* Normal Record Indicators */}
+                  {entry?.photos?.length ? (
                      <div className="flex items-center text-[9px] font-black text-blue-500 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100">
-                       <ImageIcon size={10} className="mr-1" /> {entry.photos.length}P
+                       <ImageIcon size={10} className="mr-1" /> {entry.photos.length}张照片
                      </div>
                    ) : null}
-                   {entry?.issueNote && <div className="text-[9px] font-black text-orange-500 bg-orange-50 px-1.5 py-0.5 rounded border border-orange-100 uppercase">Note</div>}
-                 </div>
+                   
+                   {entry?.note && <div className="text-[9px] font-black text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200 uppercase">备注</div>}
+                   
+                   {/* Inputs */}
+                   {requiresInput && pressureType === 'number' && (
+                      <div className="flex items-center border border-slate-200 rounded overflow-hidden h-6 bg-white ml-1">
+                        <input 
+                          type="number" 
+                          inputMode="numeric"
+                          placeholder="0"
+                          className="w-10 text-center font-bold text-xs text-slate-800 outline-none bg-transparent h-full"
+                          value={entry?.value || ''}
+                          onChange={(e) => onUpdate(uniqueId, { value: e.target.value })}
+                        />
+                        <span className="bg-slate-100 text-[8px] font-bold text-slate-500 px-1 h-full flex items-center">{inputLabel || 'PSI'}</span>
+                      </div>
+                   )}
+                   {pressureType === 'range' && (
+                      <div className="flex gap-2 ml-1 justify-center">
+                         {['RED', 'YELLOW', 'GREEN'].map(c => (
+                           <button 
+                             key={c}
+                             onClick={() => handleRangeSelect(c)}
+                             className={`w-10 h-6 rounded-md border-2 transition-all shadow-sm ${entry?.value === c ? 'border-slate-800 scale-110 shadow-md ring-2 ring-white' : 'border-transparent opacity-40'} ${c==='RED'?'bg-red-500':c==='YELLOW'?'bg-yellow-400':'bg-emerald-500'}`}
+                           />
+                         ))}
+                      </div>
+                   )}
+               </div>
+            </div>
+          </div>
+
+          {/* Right Control Area */}
+          <div className={`flex flex-col items-center justify-between p-1.5 bg-slate-50/40 border-l border-slate-100/50 ${isSubItem ? 'w-16' : 'w-20'}`}>
+              <button 
+                onTouchStart={handleTouchStart}
+                onTouchMove={handleTouchMove}
+                onTouchEnd={cancelLongPress}
+                onMouseDown={startLongPress}
+                onMouseUp={cancelLongPress}
+                onMouseLeave={cancelLongPress}
+                onClick={handleMainButtonClick}
+                className={`w-full flex-1 rounded-[14px] flex flex-col items-center justify-center transition-all relative overflow-hidden active:scale-95 select-none touch-none border
+                  ${getStatusStyles()}
+                  ${isPressing ? 'scale-110 bg-emerald-100 border-emerald-300' : ''}
+                  ${(pressureType === 'range' && entry?.value !== 'GREEN' && status === 'unchecked') ? 'opacity-30' : ''}`}
+              >
+                  {isPressing && <div className="absolute inset-0 bg-emerald-500/20 animate-pulse" />}
+                  
+                  {status === 'na' ? (
+                    <span className="font-black text-[12px] leading-none">N/A</span>
+                  ) : status === 'flagged' ? (
+                    <AlertTriangle strokeWidth={3} size={isSubItem ? 22 : 28} />
+                  ) : (
+                    <Check strokeWidth={4} size={isSubItem ? 22 : 28} className={isPressing ? 'text-emerald-600' : ''} />
+                  )}
+              </button>
+
+              <button 
+                onClick={(e) => { e.stopPropagation(); setShowTools(!showTools); }}
+                className={`mt-1.5 w-full h-5 rounded-md flex items-center justify-center transition-all border border-slate-200/50 shadow-sm active:scale-90 bg-white
+                  ${showTools ? 'bg-slate-900 text-white border-slate-900' : 'text-slate-400'}`}
+              >
+                  {showTools ? <ChevronUp size={10} strokeWidth={4} /> : <ChevronDown size={10} strokeWidth={4} />}
+              </button>
+          </div>
+        </div>
+
+        {/* Dropdown Tools */}
+        {showTools && (
+          <div className="bg-slate-50/90 backdrop-blur-sm border-t border-slate-200/50 p-4 animate-in slide-in-from-top-2 duration-200">
+            
+            {/* Control Grid */}
+            <div className={`grid gap-2 mb-4 ${isSubItem ? 'grid-cols-2' : 'grid-cols-4'}`}>
+               
+               {/* 1. N/A */}
+               <button 
+                 onClick={() => {
+                   const isNA = status === 'na';
+                   onUpdate(uniqueId, { status: isNA ? 'unchecked' : 'na', timestamp: isNA ? null : new Date().toISOString() });
+                 }}
+                 className={`h-11 rounded-xl font-black text-xs border-2 transition-all active:scale-95 shadow-sm flex items-center justify-center
+                   ${status === 'na' ? 'bg-slate-500 text-white border-slate-600' : 'bg-white text-slate-400 border-slate-200'}`}
+               >
+                 N/A
+               </button>
+
+               {/* 2. Camera (Normal) */}
+               {isSubItem && (
+                   <button 
+                     onClick={() => normalCameraRef.current?.click()}
+                     className={`h-11 rounded-xl font-black flex items-center justify-center border-2 transition-all active:scale-95 shadow-sm
+                        ${(entry?.photos?.length || 0) > 0 ? 'bg-blue-50 text-blue-600 border-blue-200' : 'bg-white text-blue-400 border-blue-200'}`}
+                   >
+                     <Camera size={20} />
+                     {(entry?.photos?.length || 0) > 0 && <span className="ml-1 text-xs">{entry?.photos.length}</span>}
+                   </button>
+               )}
+
+               {/* 3. Star (Review) */}
+               <button 
+                 onClick={handleStarClick}
+                 className={`h-11 rounded-xl font-black flex items-center justify-center border-2 transition-all active:scale-95 shadow-sm
+                   ${isStarred ? 'bg-yellow-400 text-white border-yellow-500' : 'bg-white text-yellow-400 border-yellow-200'}`}
+               >
+                 <Star size={20} fill={isStarred ? "currentColor" : "none"} />
+               </button>
+
+               {/* 4. Defect (Flagged) */}
+               {status === 'flagged' ? (
+                   <button 
+                     onClick={() => { initRectifyState(); setShowRectifyModal(true); }}
+                     className="h-11 rounded-xl font-black text-xs border-2 transition-all active:scale-95 shadow-sm flex items-center justify-center gap-1.5 bg-red-600 text-white border-red-700"
+                   >
+                     <RotateCcw size={14} /> 撤销
+                   </button>
+               ) : (
+                   <button 
+                     onClick={handleMarkDefect}
+                     className="h-11 rounded-xl font-black text-xs border-2 transition-all active:scale-95 shadow-sm flex items-center justify-center gap-1.5 bg-white text-red-600 border-red-200"
+                   >
+                     <AlertTriangle size={14} /> 缺陷
+                   </button>
+               )}
+
+               {/* 5. Camera (Normal) - for Single Item layout it is 4th item */}
+               {!isSubItem && (
+                   <button 
+                     onClick={() => normalCameraRef.current?.click()}
+                     className={`h-11 rounded-xl font-black flex items-center justify-center border-2 transition-all active:scale-95 shadow-sm
+                        ${(entry?.photos?.length || 0) > 0 ? 'bg-blue-50 text-blue-600 border-blue-200' : 'bg-white text-blue-400 border-blue-200'}`}
+                   >
+                     <Camera size={20} />
+                     {(entry?.photos?.length || 0) > 0 && <span className="ml-1 text-xs">{entry?.photos.length}</span>}
+                   </button>
                )}
             </div>
 
-            <div className="flex items-center gap-2" onClick={e => e.stopPropagation()}>
-              {requiresInput && pressureType === 'number' && (
-                <div className="flex flex-col items-center justify-center bg-white border-2 border-slate-100 rounded-xl overflow-hidden focus-within:border-blue-400 transition-all shadow-sm h-11 w-14">
-                  <input 
-                    type="number" 
-                    inputMode="numeric"
-                    placeholder="0"
-                    className="w-full flex-1 text-center font-black text-sm text-slate-700 outline-none bg-transparent pt-1"
-                    value={entry?.value || ''}
-                    onChange={(e) => onUpdate(uniqueId, { value: e.target.value })}
-                  />
-                  <span className="w-full h-4 flex items-center justify-center bg-slate-50 text-[8px] font-black text-slate-400 border-t border-slate-100 leading-none pb-0.5">PSI</span>
+            {/* Normal Photos Preview */}
+            {(entry?.photos && entry.photos.length > 0) && (
+                <div className="flex gap-2 overflow-x-auto mb-3 pb-1">
+                    {entry.photos.map((p, i) => (
+                        <div key={i} className="relative w-16 h-16 shrink-0">
+                            <img src={p} className="w-full h-full object-cover rounded-lg border border-slate-200" onClick={() => setPreviewImage(p)} />
+                             <button onClick={() => removeNormalPhoto(i)} 
+                                  className="absolute -top-2 -right-2 bg-slate-500 text-white rounded-full w-5 h-5 flex items-center justify-center shadow-md z-10">
+                                <X size={12}/>
+                              </button>
+                        </div>
+                    ))}
                 </div>
-              )}
+            )}
 
-              {pressureType === 'range' && (
-                <div className="flex flex-row gap-1.5 px-1 py-1.5 bg-slate-100/50 rounded-xl">
-                   {['RED', 'YELLOW', 'GREEN'].map(c => (
-                     <button 
-                       key={c}
-                       onClick={() => handleRangeSelect(c)}
-                       className={`w-5 h-8 rounded-full border transition-all active:scale-90 
-                         ${entry?.value === c ? 'border-slate-900 scale-110 shadow-sm opacity-100' : 'border-transparent opacity-30'} 
-                         ${c==='RED'?'bg-red-500':c==='YELLOW'?'bg-yellow-400':'bg-emerald-500'}`}
-                     />
-                   ))}
-                </div>
-              )}
-            </div>
+            <textarea
+              placeholder="正常检查备注 (留底)..."
+              className="w-full text-sm p-4 rounded-xl border-2 border-slate-100 focus:border-blue-500 outline-none resize-none bg-white font-bold text-slate-700 shadow-inner"
+              rows={2}
+              value={entry?.note || ''}
+              onChange={(e) => onUpdate(uniqueId, { note: e.target.value })}
+            />
+            <input type="file" ref={normalCameraRef} className="hidden" accept="image/*" capture="environment" onChange={(e) => handlePhotoUpload(e, 'normal')} />
           </div>
-        </div>
-
-        {/* 右侧交互控制区 */}
-        <div className={`flex flex-col items-center justify-between p-1.5 bg-slate-50/40 border-l border-slate-100/50 ${isSubItem ? 'w-16' : 'w-20'}`}>
-            <button 
-              onClick={handleMainButtonClick}
-              onMouseDown={(e) => { e.stopPropagation(); startLongPress(); }}
-              onMouseUp={cancelLongPress}
-              onMouseLeave={cancelLongPress}
-              onTouchStart={handleTouchStart}
-              onTouchMove={handleTouchMove}
-              onTouchEnd={cancelLongPress}
-              className={`w-full flex-1 rounded-[14px] flex flex-col items-center justify-center transition-all relative overflow-hidden active:scale-95 select-none touch-none border
-                ${getStatusStyles()}
-                ${isPressing ? 'scale-110 bg-emerald-100 border-emerald-300' : ''}
-                ${(pressureType === 'range' && entry?.value !== 'GREEN' && status === 'unchecked') ? 'opacity-30' : ''}`}
-            >
-                {isPressing && <div className="absolute inset-0 bg-emerald-500/20 animate-pulse" />}
-                
-                {status === 'na' ? (
-                  <span className="font-black text-[12px] leading-none">N/A</span>
-                ) : status === 'flagged' ? (
-                  <AlertTriangle strokeWidth={3} size={isSubItem ? 22 : 28} />
-                ) : (
-                  <Check strokeWidth={4} size={isSubItem ? 22 : 28} className={isPressing ? 'text-emerald-600' : ''} />
-                )}
-
-                {status === 'unchecked' && (
-                  <span className="text-[6px] font-black absolute bottom-0.5 uppercase opacity-50 tracking-tighter">Hold</span>
-                )}
-            </button>
-
-            <button 
-              onClick={(e) => { e.stopPropagation(); setShowTools(!showTools); }}
-              className={`mt-1.5 w-full h-5 rounded-md flex items-center justify-center transition-all border border-slate-200/50 shadow-sm active:scale-90 bg-white
-                ${showTools ? 'bg-slate-900 text-white border-slate-900' : 'text-slate-400'}`}
-            >
-                {showTools ? <ChevronUp size={10} strokeWidth={4} /> : <ChevronDown size={10} strokeWidth={4} />}
-            </button>
-        </div>
+        )}
       </div>
 
-      {/* 展开的工具面板 */}
-      {showTools && (
-        <div className="bg-slate-50/90 backdrop-blur-sm border-t border-slate-200/50 p-4 animate-in slide-in-from-top-2 duration-200">
-          
-          {/* 照片展示区 */}
-          {entry?.photos && entry.photos.length > 0 && (
-            <div className="flex gap-2 overflow-x-auto pb-4 mb-2">
-              {entry.photos.map((p, i) => (
-                <div key={i} className="relative shrink-0 w-20 h-20 rounded-lg overflow-hidden border border-slate-200 shadow-sm group">
-                  <img src={p} className="w-full h-full object-cover" />
-                  <button onClick={() => handleRemovePhoto(i)} className="absolute top-1 right-1 bg-red-600 text-white rounded-full p-1 opacity-80 hover:opacity-100">
-                    <X size={10} />
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
+      {/* --- MODAL 1: SUBMIT DEFECT (提交缺陷) --- */}
+      {showDefectModal && (
+          <PortalModal onClose={() => setShowDefectModal(false)}>
+              <div className="bg-white rounded-2xl p-6 w-full shadow-2xl animate-in zoom-in duration-200 flex flex-col gap-4">
+                  <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                      <div className="flex items-center gap-2 text-red-600">
+                          <AlertTriangle className="w-6 h-6" fill="currentColor" />
+                          <h3 className="text-xl font-bold text-slate-900">提交缺陷</h3>
+                      </div>
+                      <button onClick={() => setShowDefectModal(false)} className="p-1 bg-slate-100 rounded-full text-slate-500"><X size={20}/></button>
+                  </div>
+                  
+                  {/* Defect Description */}
+                  <div>
+                      <label className="text-xs font-bold text-slate-400 uppercase mb-1.5 block">缺陷描述</label>
+                      <textarea 
+                          className="w-full h-24 p-3 border-2 border-slate-200 rounded-xl focus:border-red-500 outline-none text-slate-800 font-medium resize-none bg-slate-50"
+                          placeholder="描述发现的缺陷..."
+                          value={defectNote}
+                          onChange={e => setDefectNote(e.target.value)}
+                      />
+                  </div>
 
-          <div className="flex items-center gap-2 mb-4">
-             <button 
-               onClick={() => {
-                 const isNA = status === 'na';
-                 onUpdate(uniqueId, { status: isNA ? 'unchecked' : 'na', timestamp: isNA ? null : new Date().toISOString() });
-               }}
-               className={`h-11 flex-1 rounded-xl font-black text-xs border-2 transition-all active:scale-95 shadow-sm
-                 ${status === 'na' ? 'bg-slate-500 text-white border-slate-600' : 'bg-white text-slate-400 border-slate-200'}`}
-             >
-               N/A
-             </button>
+                  {/* Defect Photos */}
+                  <div>
+                      <label className="text-xs font-bold text-slate-400 uppercase mb-1.5 block">缺陷照片</label>
+                      {/* Updated padding for X button overflow */}
+                      <div className="flex gap-3 mb-2 overflow-x-auto pt-4 pr-4 pl-1 pb-1">
+                          {defectPhotos.map((p, i) => (
+                              <div key={i} className="relative w-16 h-16 shrink-0">
+                                  <img src={p} className="w-full h-full object-cover rounded-lg border border-slate-200 shadow-sm" onClick={() => setPreviewImage(p)} />
+                                  <button onClick={() => setDefectPhotos(prev => prev.filter((_, idx) => idx !== i))} 
+                                      className="absolute -top-3 -right-3 bg-red-600 text-white rounded-full w-6 h-6 flex items-center justify-center shadow-md z-10 active:scale-95 transition-transform">
+                                    <X size={14}/>
+                                  </button>
+                              </div>
+                          ))}
+                          <button onClick={() => defectCameraRef.current?.click()} className="w-16 h-16 rounded-lg border-2 border-dashed border-red-300 flex items-center justify-center text-red-400 shrink-0 active:bg-red-50">
+                              <Camera size={20} />
+                          </button>
+                      </div>
+                  </div>
 
-             <button 
-               onClick={() => {
-                 if (canManualToggleFlag) {
-                   onUpdate(uniqueId, { status: status === 'flagged' ? 'unchecked' : 'flagged', timestamp: status === 'flagged' ? null : new Date().toISOString() });
-                 } else {
-                   alert("检测到气压异常，请先将压力标记为 GREEN 后再取消问题标记。");
-                 }
-               }}
-               className={`h-11 flex-[1.2] rounded-xl font-black text-xs border-2 transition-all active:scale-95 shadow-sm flex items-center justify-center gap-1.5
-                 ${status === 'flagged' ? 'bg-red-600 text-white border-red-700' : 'bg-white text-orange-600 border-orange-200'}`}
-             >
-               <AlertTriangle size={14} /> {status === 'flagged' ? '取消问题' : '标记问题'}
-             </button>
-
-             <button 
-               onClick={() => fileInputRef.current?.click()} 
-               className={`h-11 w-11 bg-white border border-slate-200 rounded-xl flex items-center justify-center active:bg-blue-50 shadow-sm ${isCompressing ? 'opacity-50' : 'text-blue-600'}`}
-               disabled={isCompressing}
-             >
-               {isCompressing ? <div className="w-4 h-4 border-2 border-slate-400 border-t-transparent rounded-full animate-spin"/> : <Camera size={20} />}
-             </button>
-
-             {/* 分享按钮 */}
-             {(status === 'flagged' || (entry?.photos?.length || 0) > 0 || entry?.issueNote) && (
-               <button 
-                 onClick={handleShareItem} 
-                 className="h-11 w-11 bg-blue-50 border border-blue-200 rounded-xl text-blue-600 flex items-center justify-center active:scale-95 shadow-sm"
-               >
-                 {isSharing ? <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"/> : <Share2 size={20} />}
-               </button>
-             )}
-          </div>
-
-          <textarea
-            placeholder="备注故障或详细信息..."
-            className="w-full text-sm p-4 rounded-xl border-2 border-slate-100 focus:border-blue-500 outline-none resize-none bg-white font-bold text-slate-700 shadow-inner"
-            rows={2}
-            value={entry?.issueNote || ''}
-            onChange={(e) => onUpdate(uniqueId, { issueNote: e.target.value })}
-          />
-          <input type="file" ref={fileInputRef} className="hidden" accept="image/*" capture="environment" onChange={handlePhotoUpload} />
-        </div>
+                  <div className="flex flex-col gap-3 mt-2">
+                      <div className="flex gap-3">
+                          <button onClick={() => handleDefectConfirm(false)} className="flex-[2] py-3 bg-red-600 text-white font-bold rounded-xl text-sm shadow-md">确认提交</button>
+                          
+                          <button onClick={handleShareDefect} className="flex-1 py-3 bg-blue-50 text-blue-600 border border-blue-100 font-bold rounded-xl flex items-center justify-center gap-1 text-sm">
+                              {isSharing ? <div className="animate-spin w-4 h-4 border-2 border-current border-t-transparent rounded-full"/> : <><Share2 size={16}/> 分享</>}
+                          </button>
+                      </div>
+                      
+                      <button onClick={() => handleDefectConfirm(true)} className="w-full py-4 bg-emerald-600 text-white font-bold rounded-xl shadow-lg shadow-emerald-200 flex items-center justify-center gap-2">
+                         <Wrench size={18} /> 前往整改
+                      </button>
+                  </div>
+                  
+                  <input type="file" ref={defectCameraRef} className="hidden" accept="image/*" capture="environment" onChange={(e) => handlePhotoUpload(e, 'defect')} />
+              </div>
+          </PortalModal>
       )}
 
-      {/* 隐藏的分享卡片 DOM 结构 - 使用 display: none 默认隐藏，生成时临时显示 */}
-      <div 
-        ref={shareCardRef} 
-        style={{ display: 'none', position: 'absolute', top: 0, left: 0, width: '600px', backgroundColor: '#f8fafc', padding: '30px', borderRadius: '16px', zIndex: -1 }}
-      >
-        <div className="border-b-4 border-slate-900 pb-4 mb-6 flex items-end justify-between">
-           <div>
-               <h2 className="text-3xl font-black text-slate-900 leading-none">发现报告</h2>
-               <div className="text-sm font-bold text-slate-500 uppercase tracking-[0.3em] mt-1">FINDING REPORT</div>
-           </div>
-        </div>
-        
-        <div className="flex justify-between bg-white p-5 rounded-2xl border border-slate-200 mb-8 shadow-sm">
-           <div><div className="text-xs font-bold text-slate-400 uppercase mb-1">注册号 REG</div><div className="text-2xl font-black text-slate-900 font-mono">B-{info.registration}</div></div>
-           <div><div className="text-xs font-bold text-slate-400 uppercase mb-1">检查员 INSPECTOR</div><div className="text-2xl font-bold text-slate-900">{info.inspectorName}</div></div>
-           <div className="text-right"><div className="text-xs font-bold text-slate-400 uppercase mb-1">日期 DATE</div><div className="text-2xl font-mono font-bold text-slate-900">{info.date}</div></div>
-        </div>
-
-        {/* 醒目的条目卡片设计 */}
-        <div className="bg-white border-l-[16px] border-red-500 pl-8 py-6 mb-8 rounded-r-3xl shadow-xl border-y border-r border-slate-200">
-           {subLabel && (
-             <div className="mb-4">
-                <span className="inline-block bg-slate-900 text-white text-2xl font-black px-5 py-2 rounded-xl shadow-md uppercase">
-                    {subLabel}
-                </span>
-             </div>
-           )}
-           <div className="text-3xl font-black text-slate-900 leading-tight">{label}</div>
-           {status === 'flagged' && (
-               <div className="mt-5 inline-flex items-center gap-3 bg-red-100 text-red-700 px-4 py-2 rounded-lg font-bold uppercase tracking-wider text-sm border border-red-200">
-                   <AlertTriangle size={20} fill="currentColor" />
-                   <span>Issue Identified 已发现问题</span>
-               </div>
-           )}
-        </div>
-
-        {entry?.issueNote && (
-          <div className="mb-8 px-2">
-            <div className="flex items-center gap-2 mb-2">
-                <div className="w-1 h-4 bg-yellow-400 rounded-full"></div>
-                <div className="text-sm font-bold text-slate-400 uppercase">备注 / Note</div>
-            </div>
-            <div className="bg-yellow-50 p-5 rounded-2xl border border-yellow-200 text-xl font-medium text-slate-800 leading-relaxed shadow-sm">
-               {entry.issueNote}
-            </div>
-          </div>
-        )}
-
-        {entry?.photos && entry.photos.length > 0 && (
-          <div className="px-2">
-            <div className="flex items-center gap-2 mb-4 border-b border-slate-200 pb-2">
-                 <div className="w-1 h-4 bg-blue-500 rounded-full"></div>
-                 <div className="text-sm font-bold text-slate-400 uppercase">现场照片 / Photos ({entry.photos.length})</div>
-            </div>
-            <div className="flex flex-col gap-6">
-              {entry.photos.map((p, i) => (
-                <div key={i} className="w-full rounded-2xl overflow-hidden border border-slate-200 shadow-lg bg-white relative">
-                  {/* 图片以块级元素显示，宽度100% */}
-                  <img src={p} className="w-full h-auto block" />
-                  <div className="absolute bottom-3 right-3 bg-black/70 backdrop-blur-sm text-white text-xs px-3 py-1.5 rounded-full font-bold">
-                      照片 Photo {i+1}
+      {/* --- MODAL 2: RECTIFICATION (整改措施) --- */}
+      {showRectifyModal && (
+          <PortalModal onClose={() => setShowRectifyModal(false)}>
+              <div className="bg-white rounded-2xl p-6 w-full shadow-2xl animate-in zoom-in duration-200 flex flex-col gap-4">
+                  <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                      <div className="flex items-center gap-2 text-emerald-600">
+                          <Wrench className="w-6 h-6" />
+                          <h3 className="text-xl font-bold text-slate-900">整改措施</h3>
+                      </div>
+                      <button onClick={() => setShowRectifyModal(false)} className="p-1 bg-slate-100 rounded-full text-slate-500"><X size={20}/></button>
                   </div>
-                </div>
-              ))}
-            </div>
+
+                  {/* Original Defect Display */}
+                  <div className="bg-red-50 p-3 rounded-xl border border-red-100 text-sm">
+                      <div className="font-bold text-[10px] uppercase text-red-400 mb-1">原始缺陷</div>
+                      <div className="text-red-800 mb-2">{entry?.issueNote || defectNote || '无描述'}</div>
+                      {(entry?.issuePhotos || defectPhotos).length > 0 && (
+                          <div className="flex gap-2 overflow-x-auto">
+                              {(entry?.issuePhotos || defectPhotos).map((p, i) => (
+                                  <img key={i} src={p} className="w-12 h-12 object-cover rounded border border-red-200" onClick={() => setPreviewImage(p)}/>
+                              ))}
+                          </div>
+                      )}
+                  </div>
+                  
+                  <div>
+                      <label className="text-xs font-bold text-slate-400 uppercase mb-1.5 block">整改方案</label>
+                      <textarea 
+                          className="w-full h-24 p-3 border-2 border-slate-200 rounded-xl focus:border-emerald-500 outline-none text-slate-800 font-medium resize-none"
+                          placeholder="描述如何解决的 (默认: 已现场整改)..."
+                          value={rectifyMethod}
+                          onChange={e => setRectifyMethod(e.target.value)}
+                      />
+                  </div>
+
+                  <div>
+                      <label className="text-xs font-bold text-slate-400 uppercase mb-1.5 block">整改照片</label>
+                      {/* Updated padding for X button overflow */}
+                      <div className="flex gap-3 mb-2 overflow-x-auto pt-4 pr-4 pl-1 pb-1">
+                          {rectifyPhotos.map((p, i) => (
+                              <div key={i} className="relative w-16 h-16 shrink-0">
+                                  <img src={p} className="w-full h-full object-cover rounded-lg border border-slate-200 shadow-sm" onClick={() => setPreviewImage(p)} />
+                                  <button onClick={() => setRectifyPhotos(prev => prev.filter((_, idx) => idx !== i))} 
+                                      className="absolute -top-3 -right-3 bg-red-600 text-white rounded-full w-6 h-6 flex items-center justify-center shadow-md z-10 active:scale-95 transition-transform">
+                                    <X size={14}/>
+                                  </button>
+                              </div>
+                          ))}
+                          <button onClick={() => rectifyCameraRef.current?.click()} className="w-16 h-16 rounded-lg border-2 border-dashed border-emerald-300 flex items-center justify-center text-emerald-400 shrink-0 active:bg-emerald-50">
+                              <Camera size={20} />
+                          </button>
+                      </div>
+                  </div>
+
+                  <div className="flex flex-col gap-3 mt-2">
+                      <button onClick={handleRectifySubmit} className="w-full py-4 bg-emerald-600 text-white font-bold rounded-xl shadow-lg shadow-emerald-200">
+                          确认已解决
+                      </button>
+                      <button onClick={handleRevokeDefect} className="py-2 text-xs font-bold text-slate-400 flex items-center justify-center gap-1 hover:text-red-500 transition-colors bg-slate-50 rounded-lg">
+                          <RotateCcw size={12}/> 撤销缺陷 (误报)
+                      </button>
+                  </div>
+                  <input type="file" ref={rectifyCameraRef} className="hidden" accept="image/*" capture="environment" onChange={(e) => handlePhotoUpload(e, 'rectify')} />
+              </div>
+          </PortalModal>
+      )}
+
+      {/* --- MODAL 3: HISTORY --- */}
+      {showHistoryModal && (
+          <PortalModal onClose={() => setShowHistoryModal(false)}>
+              <div className="bg-white rounded-2xl p-6 w-full shadow-2xl animate-in zoom-in duration-200 flex flex-col gap-4 max-h-[80vh]">
+                  <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                      <div className="flex items-center gap-2 text-slate-800">
+                          <HistoryIcon className="w-6 h-6" />
+                          <h3 className="text-xl font-bold text-slate-900">检查记录历史</h3>
+                      </div>
+                      <button onClick={() => setShowHistoryModal(false)} className="p-1 bg-slate-100 rounded-full text-slate-500"><X size={20}/></button>
+                  </div>
+                  
+                  <div className="overflow-y-auto flex-1 space-y-4 pr-1">
+                      {/* Current Active Record */}
+                      {(entry?.rectification || status === 'flagged') && (
+                          <div className="border-2 border-slate-200 rounded-xl p-3 bg-white">
+                               <div className="flex justify-between items-center mb-2">
+                                   <span className="bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded text-xs font-bold">当前状态</span>
+                                   <span className="text-xs text-slate-400">{entry.timestamp ? format(new Date(entry.timestamp), 'yyyy-MM-dd') : ''}</span>
+                               </div>
+                               <div className="text-sm font-bold text-slate-800 mb-1">Issue: <span className="text-red-600">{entry.issueNote || 'No Note'}</span></div>
+                               {entry.issuePhotos.length > 0 && (
+                                   <div className="flex gap-2 overflow-x-auto mb-2">
+                                       {entry.issuePhotos.map((p, i) => <img key={i} src={p} className="w-12 h-12 object-cover rounded border" onClick={() => setPreviewImage(p)}/>)}
+                                   </div>
+                               )}
+                               {entry.rectification && (
+                                   <div className="text-sm font-bold text-slate-800 mt-2 pt-2 border-t border-slate-100">
+                                       Rectification: <span className="text-emerald-600">{entry.rectification.method}</span>
+                                       {entry.rectification.photos.length > 0 && (
+                                           <div className="flex gap-2 overflow-x-auto mt-1">
+                                               {entry.rectification.photos.map((p, i) => <img key={i} src={p} className="w-12 h-12 object-cover rounded border" onClick={() => setPreviewImage(p)}/>)}
+                                           </div>
+                                       )}
+                                   </div>
+                               )}
+                          </div>
+                      )}
+
+                      {/* History List */}
+                      {entry?.history?.map((h, i) => (
+                          <div key={i} className="border border-slate-100 rounded-xl p-3 bg-slate-50 opacity-80">
+                               <div className="flex justify-between items-center mb-2">
+                                   <span className="bg-slate-200 text-slate-500 px-2 py-0.5 rounded text-xs font-bold">历史记录 #{entry.history!.length - i}</span>
+                                   <span className="text-xs text-slate-400">{h.timestamp ? format(new Date(h.timestamp), 'yyyy-MM-dd') : ''}</span>
+                               </div>
+                               <div className="text-xs text-slate-600 mb-1"><span className="font-bold">Issue:</span> {h.issueNote}</div>
+                               <div className="flex gap-1 overflow-x-auto mb-1">
+                                   {h.issuePhotos.map((p, x) => <img key={x} src={p} className="w-8 h-8 object-cover rounded" onClick={() => setPreviewImage(p)}/>)}
+                               </div>
+                               <div className="text-xs text-slate-600"><span className="font-bold">Fixed:</span> {h.rectification?.method}</div>
+                          </div>
+                      ))}
+                  </div>
+
+                  <div className="pt-2">
+                      <button 
+                        onClick={() => { setShowHistoryModal(false); setTimeout(() => handleMarkDefect(), 200); }} 
+                        className="w-full py-3 bg-red-50 text-red-600 border border-red-100 font-bold rounded-xl flex items-center justify-center gap-2"
+                      >
+                         <AlertTriangle size={16} /> 再次标记缺陷
+                      </button>
+                  </div>
+              </div>
+          </PortalModal>
+      )}
+
+      {/* --- HIDDEN SHARE CARD (For Single Defect Share) --- */}
+      <div ref={shareCardRef} style={{ display: 'none', position: 'absolute', top: 0, left: 0, width: '600px', zIndex: -1 }}>
+          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+             <div className="bg-red-600 px-6 py-5 flex items-center justify-between">
+                 <div className="text-white">
+                     <h2 className="text-2xl font-black">发现缺陷报告</h2>
+                     <p className="text-sm font-bold opacity-80 uppercase tracking-wider">Defect Report</p>
+                 </div>
+                 <div className="text-right text-white">
+                     <div className="text-3xl font-black font-mono">B-{info.registration}</div>
+                     <div className="text-xs font-bold opacity-80">{info.date}</div>
+                 </div>
+             </div>
+             <div className="p-6">
+                 <div className="border-l-4 border-red-500 bg-red-50/50 p-4 rounded-r-xl">
+                     <div className="flex justify-between items-start mb-2">
+                         <div className="font-bold text-slate-900 text-lg pr-4">
+                             {label} {subLabel && <span className="bg-slate-200 text-slate-600 px-2 py-0.5 rounded text-sm">{subLabel}</span>}
+                         </div>
+                     </div>
+                     <div className="text-red-800 font-medium mb-3">{defectNote || '无详细描述'}</div>
+                     {defectPhotos.length > 0 && (
+                         <div className="flex flex-col gap-4 mt-3">
+                             {defectPhotos.map((p, pIdx) => (
+                                 <img key={pIdx} src={p} className="w-full h-auto object-contain rounded-lg border border-red-100 bg-white shadow-sm" style={{maxWidth: '100%', maxHeight: '400px'}} />
+                             ))}
+                         </div>
+                     )}
+                 </div>
+             </div>
+             <div className="bg-slate-100 px-6 py-3 border-t border-slate-200 text-center text-slate-400 text-xs font-bold uppercase tracking-widest">
+                Inspector: {info.inspectorName}
+             </div>
           </div>
-        )}
-        
-        {/* 卡片底部水印 */}
-        <div className="mt-10 pt-6 border-t-2 border-slate-200 flex justify-between items-center text-slate-400 text-xs font-bold uppercase tracking-wide">
-             <span>Aircraft Final Inspection App</span>
-             <span>生成时间 Generated: {new Date().toLocaleTimeString()}</span>
-        </div>
       </div>
-    </div>
+
+    </>
   );
 };

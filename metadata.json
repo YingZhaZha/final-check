@@ -1,5 +1,5 @@
 {
-  "name": "正式版01---final-check ",
+  "name": "勿删版--final-check ---标记整改缺陷基本可用，且报告版本-包含所有历史版本",
   "description": "Digital Final Inspection Checklist for Aircraft Maintenance with photo verification and digital signature.",
   "requestFramePermissions": [
     "camera"

@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect, useMemo, useLayoutEffect, useCallback } from 'react';
 import { CHECKLIST_DATA, INSPECTOR_REQUIREMENTS } from './constants';
 import { AppState, ChecklistSession, CheckEntry, SectionConfig } from './types';
@@ -8,11 +9,10 @@ import html2canvas from 'html2canvas';
 import Webcam from 'react-webcam';
 import { 
   Plane, User, Calendar, ChevronRight, CheckCircle2, 
-  AlertTriangle, RotateCcw, PenTool, Camera, Download, LayoutList, Share2, FileCheck, Edit2, X, Trash2, Wand2, Undo2, Smartphone, RotateCw, ArrowLeft, ClipboardList, RefreshCw, History
+  AlertTriangle, RotateCcw, PenTool, Camera, Download, LayoutList, Share2, FileCheck, Edit2, X, Trash2, Wand2, Undo2, Smartphone, RotateCw, ArrowLeft, ClipboardList, RefreshCw, History, ShieldCheck, Wrench, Send, Star
 } from 'lucide-react';
 import { format } from 'date-fns';
 
-// Helper to wait for images (used for sharing all issues)
 const waitForImages = (element: HTMLElement) => {
     const imgs = element.querySelectorAll('img');
     return Promise.all(Array.from(imgs).map(img => {
@@ -24,14 +24,12 @@ const waitForImages = (element: HTMLElement) => {
     }));
 };
 
-// Helper to remove text inside parentheses (English and Chinese)
 const cleanText = (text: string) => {
   return text.replace(/[\(（][^\)）]*[\)）]/g, '').trim();
 };
 
 const HIGHLIGHT_RED_IDS = ['2_7', '2_8', '2_14', '2_15', '2_16', '2_25', '2_26'];
 
-// Report requirements with '、' separator
 const REPORT_REQUIREMENTS = [
   "1、由相应飞机行业负责人及L3授权人员施行。",
   "2、必须在交机前半天执行最终检查工作并且临交机前再进行一次客货仓FOD 检查。",
@@ -39,24 +37,27 @@ const REPORT_REQUIREMENTS = [
   "4、涉及门上工作，必须双人互检！"
 ];
 
-const APP_VERSION = 'v1.2.0';
+const APP_VERSION = 'v3.2.0';
+
 const CHANGELOGS = [
   {
-    version: 'v1.2.0',
-    date: format(new Date(), 'yyyy-MM-dd'), // Current device date
+    version: 'v3.2.0',
+    date: format(new Date(), 'yyyy-MM-dd'),
     changes: [
-      '优化长按标记逻辑，防止滑动误触',
-      '首页UI调整，适配单屏显示',
-      '添加版本日志查看功能'
+      '新增：回顾功能 (星标)，归入缺陷栏',
+      '优化：术语统一为“缺陷”',
+      '优化：整改界面图片支持原图预览',
+      '优化：报告时间戳颜色变淡，图片比例保持'
     ]
   },
   {
-    version: 'v1.0.0',
-    date: '2024-10-24',
+    version: 'v3.1.0',
+    date: '2025-06-05',
     changes: [
-      '初始版本发布',
-      '支持拍照、签名及PDF导出',
-      '集成标准检查单流程'
+      '新增：缺陷记录与整改流程分离',
+      '新增：历史记录支持多次整改',
+      '新增：问题列表批量分享功能',
+      '优化：整改界面操作体验'
     ]
   }
 ];
@@ -74,7 +75,6 @@ export default function App() {
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        // Deep merge info to ensure registration/inspectorName are never undefined
         return {
              ...defaultState,
              ...parsed,
@@ -97,16 +97,17 @@ export default function App() {
   
   const [autoCheckedIds, setAutoCheckedIds] = useState<string[]>([]);
   
-  // Refs
   const sigPadRef = useRef<SignatureCanvas>(null);
   const sigContainerRef = useRef<HTMLDivElement>(null);
   const webcamRef = useRef<Webcam>(null);
   
   const printRef = useRef<HTMLDivElement>(null);
-  const reportHeaderRef = useRef<HTMLDivElement>(null); // New ref for repeated PDF header
-  const allIssuesExportRef = useRef<HTMLDivElement>(null); // Ref for the hidden all-issues container
+  const reportHeaderRef = useRef<HTMLDivElement>(null); 
+  const allIssuesExportRef = useRef<HTMLDivElement>(null); 
   const issuesRef = useRef<HTMLDivElement>(null);
   const touchStartRef = useRef<number | null>(null);
+
+  const isAdmin = state.info.inspectorName === '802711';
 
   useEffect(() => {
     window.history.replaceState({ step: state.step }, '', '');
@@ -249,15 +250,17 @@ export default function App() {
       section.items.forEach(item => {
         if (item.type === 'simple') {
           total++;
-          const st = state.session[item.id]?.status;
-          if (st === 'ok' || st === 'na') checked++;
-          if (st === 'flagged') flagged++;
+          const entry = state.session[item.id];
+          const st = entry?.status;
+          if ((st === 'ok' || st === 'na') && !entry?.isStarred) checked++;
+          if (st === 'flagged' || entry?.isStarred) flagged++;
         } else {
           item.subItems?.forEach(sub => {
             total++;
-            const st = state.session[`${item.id}_${sub.id}`]?.status;
-            if (st === 'ok' || st === 'na') checked++;
-            if (st === 'flagged') flagged++;
+            const entry = state.session[`${item.id}_${sub.id}`];
+            const st = entry?.status;
+            if ((st === 'ok' || st === 'na') && !entry?.isStarred) checked++;
+            if (st === 'flagged' || entry?.isStarred) flagged++;
           });
         }
       });
@@ -303,7 +306,6 @@ export default function App() {
     }
   };
 
-  // Explicit download handler for the separate button
   const handleDownload = () => {
     if (!generatedFile) return;
     const url = URL.createObjectURL(generatedFile);
@@ -314,19 +316,18 @@ export default function App() {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-    
-    // Success Prompt
     setTimeout(() => {
         alert('报告下载成功！');
     }, 500);
   };
 
   const handleShareIssues = async () => {
-    if (!allIssuesExportRef.current) return;
+    if (!allIssuesExportRef.current) {
+        alert("无法找到导出内容，请重试");
+        return;
+    }
     
     if (navigator.vibrate) navigator.vibrate(50);
-
-    // Show the container temporarily for capture
     allIssuesExportRef.current.style.display = 'block';
 
     try {
@@ -334,23 +335,24 @@ export default function App() {
         await new Promise(resolve => setTimeout(resolve, 300));
 
         const canvas = await html2canvas(allIssuesExportRef.current, {
-            scale: 2.0, // 提升清晰度：1.5 -> 2.0
+            scale: 2.0,
             useCORS: true,
-            backgroundColor: '#f8fafc' // 使用浅灰色背景
+            backgroundColor: '#f8fafc'
         });
 
         canvas.toBlob(async (blob) => {
-            if (!blob) return;
-            // Change extension to .jpg
-            const filename = `Findings_B-${state.info.registration}_${format(new Date(), 'yyyyMMdd_HHmm')}.jpg`;
-            // Change MIME type to image/jpeg
+            if (!blob) {
+                if (allIssuesExportRef.current) allIssuesExportRef.current.style.display = 'none';
+                return;
+            }
+            const filename = `Defects_B-${state.info.registration}_${format(new Date(), 'yyyyMMdd_HHmm')}.jpg`;
             const file = new File([blob], filename, { type: 'image/jpeg' });
             if (navigator.canShare && navigator.canShare({ files: [file] })) {
                 try {
                     await navigator.share({
                         files: [file],
-                        title: `Findings Report: B-${state.info.registration}`,
-                        text: `Findings reported on B-${state.info.registration}. Please review.`
+                        title: `Defects Report: B-${state.info.registration}`,
+                        text: `Found defects on B-${state.info.registration}. Please handle.`
                     });
                 } catch (e) { }
             } else {
@@ -361,13 +363,12 @@ export default function App() {
                 a.click();
                 URL.revokeObjectURL(url);
             }
-            // Hide container again
             if (allIssuesExportRef.current) allIssuesExportRef.current.style.display = 'none';
-        }, 'image/jpeg', 0.85); // 提升 JPEG 质量：0.6 -> 0.85 (去噪点)
+        }, 'image/jpeg', 0.85);
     } catch (e) {
         console.error("Capture failed", e);
         if (allIssuesExportRef.current) allIssuesExportRef.current.style.display = 'none';
-        alert("无法生成图片，请重试");
+        alert("图片生成失败，请重试");
     }
   };
 
@@ -396,6 +397,36 @@ export default function App() {
        }
     }
   };
+  
+  const getRectifiedOrFlaggedItems = () => {
+    const items = CHECKLIST_DATA.map(s => flattenItemsForReport(s)).flat();
+    return items.filter(item => {
+        const entry = state.session[item.uniqueId];
+        return entry && (entry.status === 'flagged' || entry.rectification || (entry.history && entry.history.length > 0));
+    });
+  };
+  
+  const getItemsForBatchShare = () => {
+      // Only sharing active issues for the batch share image
+      return getRectifiedOrFlaggedItems().filter(i => state.session[i.uniqueId]?.status === 'flagged');
+  };
+
+  const handleGeneratePDF = async () => {
+      if (!printRef.current) return;
+      setIsGenerating(true);
+      const generatePromise = generatePDF(state, printRef.current, reportHeaderRef.current);
+      const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), 60000));
+
+      try {
+          const file = await Promise.race([generatePromise, timeoutPromise]) as File;
+          setGeneratedFile(file);
+      } catch (e) {
+          console.error(e);
+          alert("报告生成失败。建议：\n1. 减少单次生成的照片数量\n2. 关闭后台其他应用释放内存\nError: " + e);
+      } finally {
+          setIsGenerating(false);
+      }
+  };
 
   if (state.step === 'welcome') {
     return (
@@ -408,8 +439,8 @@ export default function App() {
                     <h3 className="text-xl font-bold text-slate-800 mb-6 flex items-center gap-2"><History size={20} className="text-blue-600"/> 更新日志</h3>
                     <div className="flex-1 overflow-y-auto space-y-6 pr-2">
                         {CHANGELOGS.map((log, idx) => (
-                            <div key={idx} className="relative pl-6 border-l-2 border-slate-100 last:border-0">
-                                <div className="absolute left-[-5px] top-0 w-2.5 h-2.5 rounded-full bg-blue-500 ring-4 ring-white"></div>
+                            <div key={idx} className="relative pl-8 pb-8 border-l-2 border-slate-300 last:border-0 last:pb-0">
+                                <div className="absolute left-[-5px] top-0 w-2.5 h-2.5 rounded-full bg-blue-500 ring-4 ring-white z-10"></div>
                                 <div className="flex justify-between items-baseline mb-2">
                                     <span className="font-bold text-slate-800">{log.version}</span>
                                     <span className="text-xs font-mono text-slate-400">{log.date}</span>
@@ -417,7 +448,7 @@ export default function App() {
                                 <ul className="space-y-1.5">
                                     {log.changes.map((change, cIdx) => (
                                         <li key={cIdx} className="text-sm text-slate-600 leading-snug flex items-start gap-2">
-                                            <span className="text-blue-400 text-[10px] mt-1">●</span> {change}
+                                            <span className="text-blue-400 text-[10px] mt-1 shrink-0">●</span> {change}
                                         </li>
                                     ))}
                                 </ul>
@@ -458,11 +489,13 @@ export default function App() {
             <div>
               <label className="text-[10px] font-bold text-slate-400 uppercase mb-1.5 block pl-1">检查员 / Inspector</label>
               <div className="flex items-center bg-slate-50 rounded-2xl border border-slate-200 px-4 py-1 focus-within:border-blue-500 transition-all">
-                <User size={18} className="text-slate-400 mr-3 shrink-0" />
+                {isAdmin ? <ShieldCheck size={18} className="text-blue-500 mr-3 shrink-0" /> : <User size={18} className="text-slate-400 mr-3 shrink-0" />}
                 <input type="text" className="flex-1 bg-transparent py-4 font-bold text-base outline-none text-slate-800 min-w-0" placeholder="请输入姓名" value={state.info.inspectorName} onChange={e => setState(s => ({...s, info: {...s.info, inspectorName: e.target.value}}))} />
               </div>
             </div>
-            <button disabled={!state.info.registration || !state.info.inspectorName} onClick={() => setStep('inspect')} className="w-full bg-[#007AFF] text-white font-bold py-4 rounded-2xl text-lg shadow-xl shadow-blue-200 disabled:opacity-50 active:scale-[0.98] transition-all flex items-center justify-center gap-2 mt-2">开始检查 <ChevronRight size={20} /></button>
+            <button disabled={!state.info.registration || !state.info.inspectorName} onClick={() => setStep('inspect')} className={`w-full text-white font-bold py-4 rounded-2xl text-lg shadow-xl disabled:opacity-50 active:scale-[0.98] transition-all flex items-center justify-center gap-2 mt-2 ${isAdmin ? 'bg-indigo-600 shadow-indigo-200' : 'bg-[#007AFF] shadow-blue-200'}`}>
+                {isAdmin ? '管理员模式检查' : '开始检查'} <ChevronRight size={20} />
+            </button>
           </div>
 
           <div className="bg-orange-50/60 p-5 rounded-2xl border border-orange-100 text-left w-full shrink-0">
@@ -524,52 +557,47 @@ export default function App() {
         )}
 
         <div className="sticky top-0 z-50 bg-white/95 backdrop-blur shadow-sm border-b border-slate-200">
-           {/* Redesigned Header: Single Row Info + Slim Progress */}
            <div className="px-4 py-3 flex items-center justify-between">
-                {/* Left Group: Reg | Inspector - Clickable Area */}
                 <div className="flex items-center bg-slate-50 rounded-lg p-1 -ml-1 active:bg-slate-100 transition-colors cursor-pointer group" onClick={() => setIsEditingInfo(true)}>
-                    {/* Registration */}
                     <div className="flex flex-col px-2">
                         <div className="text-[10px] font-bold text-slate-400 uppercase leading-none mb-0.5">注册号 REG</div>
                         <div className="text-xl font-black text-slate-900 font-mono leading-none">B-{state.info.registration || '___'}</div>
                     </div>
-
-                    {/* Vertical Divider */}
                     <div className="w-px h-6 bg-slate-200 mx-1"></div>
-
-                    {/* Inspector */}
                     <div className="flex flex-col px-2">
                         <div className="text-[10px] font-bold text-slate-400 uppercase leading-none mb-0.5">检查员 INSPECTOR</div>
                         <div className="text-sm font-bold text-slate-900 flex items-center gap-1 leading-none truncate max-w-[100px]">
+                            {isAdmin && <ShieldCheck size={12} className="text-blue-500" />}
                             {state.info.inspectorName || '点击输入'}
                         </div>
                     </div>
-                    
-                    {/* Explicit Edit Icon at the end of the block */}
-                    <div className="px-1 text-slate-300 group-hover:text-blue-500 transition-colors">
-                        <Edit2 size={14} />
-                    </div>
+                    <div className="px-1 text-slate-300 group-hover:text-blue-500 transition-colors"><Edit2 size={14} /></div>
                 </div>
-
-                {/* Right: Date */}
                 <div className="flex flex-col items-end">
                     <div className="text-[10px] font-bold text-slate-400 uppercase leading-none mb-0.5">日期 DATE</div>
                     <div className="text-base font-bold text-slate-900 font-mono leading-none">{state.info.date}</div>
                 </div>
            </div>
            
-           {/* Slim Progress Bar */}
            <div className="h-1.5 w-full bg-slate-100 flex">
                 <div className="bg-emerald-500 h-full transition-all duration-500 ease-out" style={{width: `${stats.checkedPercent}%`}} />
                 <div className="bg-red-500 h-full transition-all duration-500 ease-out" style={{width: `${stats.flaggedPercent}%`}} />
            </div>
            
-           {/* Tabs */}
            <div className="flex border-t border-slate-100 bg-white">
              <button onClick={() => setFilterMode('all')} className={`flex-1 py-2.5 text-xs font-bold border-b-2 transition-colors ${filterMode === 'all' ? 'border-blue-500 text-blue-600' : 'border-transparent text-slate-400'}`}>全部</button>
-             <button onClick={() => setFilterMode('pending')} className={`flex-1 py-2.5 text-xs font-bold border-b-2 transition-colors ${filterMode === 'pending' ? 'border-blue-500 text-blue-600' : 'border-transparent text-slate-400'}`}>未检 ({stats.total - (stats.checked + stats.flagged)})</button>
-             <button onClick={() => setFilterMode('flagged')} className={`flex-1 py-2.5 text-xs font-bold border-b-2 transition-all relative ${stats.flagged > 0 ? 'text-red-600 font-black' : 'text-slate-400'} ${filterMode === 'flagged' ? 'border-red-500' : 'border-transparent'}`}>
-                问题 ({stats.flagged})
+             <button onClick={() => setFilterMode('pending')} className={`flex-1 py-2.5 text-xs font-bold border-b-2 transition-colors ${filterMode === 'pending' ? 'border-blue-500 text-blue-600' : 'border-transparent text-slate-400'}`}>未检 ({stats.total - (stats.checked)})</button>
+             <button onClick={() => setFilterMode('flagged')} className={`flex-1 py-2.5 text-xs font-bold border-b-2 transition-all relative flex items-center justify-center gap-2 ${stats.flagged > 0 ? 'text-red-600 font-black' : 'text-slate-400'} ${filterMode === 'flagged' ? 'border-red-500' : 'border-transparent'}`}>
+                缺陷/回顾 ({stats.flagged})
+                {/* Batch Share Button in Tab Header */}
+                {stats.flagged > 0 && filterMode === 'flagged' && (
+                    <div 
+                       onClick={(e) => { e.stopPropagation(); handleShareIssues(); }}
+                       className="ml-1 p-1 bg-red-100 text-red-600 rounded-md active:scale-90 transition-transform shadow-sm"
+                    >
+                        <Share2 size={12} />
+                    </div>
+                )}
              </button>
            </div>
         </div>
@@ -583,10 +611,17 @@ export default function App() {
                       if (mode === 'all') return true;
                       if (item.type === 'simple') {
                           const st = state.session[item.id]?.status || 'unchecked';
-                          return mode === 'pending' ? st === 'unchecked' : st === 'flagged';
+                          const isStarred = state.session[item.id]?.isStarred;
+                          // Pending: Unchecked OR Starred
+                          // Flagged: Flagged OR Starred
+                          if (mode === 'pending') return st === 'unchecked' || isStarred;
+                          if (mode === 'flagged') return st === 'flagged' || isStarred;
+                          return true;
                       } else {
                           const subIds = item.subItems?.map(s => `${item.id}_${s.id}`) || [];
-                          return mode === 'pending' ? subIds.some(id => (state.session[id]?.status || 'unchecked') === 'unchecked') : subIds.some(id => state.session[id]?.status === 'flagged');
+                          if (mode === 'pending') return subIds.some(id => (state.session[id]?.status || 'unchecked') === 'unchecked' || state.session[id]?.isStarred);
+                          if (mode === 'flagged') return subIds.some(id => state.session[id]?.status === 'flagged' || state.session[id]?.isStarred);
+                          return true;
                       }
                    });
                    if (items.length === 0) return null;
@@ -603,33 +638,44 @@ export default function App() {
                              const hasFlagged = subEntries.some(e => e?.status === 'flagged');
                              const isAllCompleted = subEntries.every(e => e?.status === 'ok' || e?.status === 'na');
                              const isHighlight = HIGHLIGHT_RED_IDS.includes(item.id);
-
-                             // Ensure default left border is blue-500 to match single items
                              let multiContainerStyles = "rounded-2xl p-4 shadow-sm border border-slate-200 bg-white border-l-[6px] border-l-blue-500";
                              if (hasFlagged) {
                                multiContainerStyles = "rounded-2xl p-4 shadow-sm bg-red-50 border-red-500 border-l-[6px]";
                              } else if (isAllCompleted) {
                                multiContainerStyles = "rounded-2xl p-4 shadow-sm bg-emerald-50/20 border-emerald-500 border-l-[6px]";
                              }
+                             
+                             const isSpecialLayout = item.id === '2_16';
+                             const gridClass = isSpecialLayout 
+                                ? 'flex flex-col w-full gap-3' // Special Vertical Stack
+                                : (item.layout === 'grid' ? 'grid grid-cols-2 gap-2' : 'grid grid-cols-1 gap-2');
 
                              return (
                                <div key={item.id} className={`${multiContainerStyles} transition-all duration-300`}>
                                  <div className={`font-bold text-[15px] mb-4 leading-relaxed border-b border-slate-50 pb-2 ${isHighlight ? 'text-red-600' : (hasFlagged ? 'text-red-900' : isAllCompleted ? 'text-emerald-900' : 'text-slate-900')}`}>{item.text}</div>
-                                 <div className={item.layout === 'grid' ? 'grid grid-cols-2 gap-2' : 'grid grid-cols-1 gap-2'}>
-                                     {item.subItems?.map(sub => (
-                                         <CheckItem 
-                                           key={`${item.id}_${sub.id}`} 
-                                           uniqueId={`${item.id}_${sub.id}`} 
-                                           label={sub.label} 
-                                           entry={state.session[`${item.id}_${sub.id}`]} 
-                                           onUpdate={updateSession} 
-                                           isSubItem={true} 
-                                           requiresInput={item.requiresInput}
-                                           inputLabel={item.inputLabel}
-                                           pressureType={item.pressureType}
-                                           info={state.info}
-                                         />
-                                     ))}
+                                 <div className={gridClass}>
+                                     {item.subItems?.map((sub, idx) => {
+                                         // Special wrapper logic for 2_16 to achieve staggering
+                                         const wrapperClass = isSpecialLayout
+                                             ? `w-[75%] ${idx % 2 === 0 ? 'self-start' : 'self-end'}`
+                                             : '';
+
+                                         return (
+                                             <div key={`${item.id}_${sub.id}`} className={wrapperClass}>
+                                                 <CheckItem 
+                                                   uniqueId={`${item.id}_${sub.id}`} 
+                                                   label={sub.label} 
+                                                   entry={state.session[`${item.id}_${sub.id}`]} 
+                                                   onUpdate={updateSession} 
+                                                   isSubItem={true} 
+                                                   requiresInput={item.requiresInput}
+                                                   inputLabel={item.inputLabel}
+                                                   pressureType={item.pressureType}
+                                                   info={state.info}
+                                                 />
+                                             </div>
+                                         );
+                                     })}
                                  </div>
                                </div>
                              );
@@ -645,7 +691,9 @@ export default function App() {
         </div>
         <div className="fixed bottom-0 left-0 w-full bg-white border-t border-slate-200 p-4 pb-6 px-6 z-40 flex gap-4 shadow-xl">
            <button onClick={() => setShowResetConfirm(true)} className="w-12 h-12 flex items-center justify-center rounded-xl bg-red-50 text-red-500 border border-red-100"><Trash2 size={22} /></button>
-           <button onClick={toggleAutoCheck} className={`w-12 h-12 flex items-center justify-center rounded-xl border transition-all ${autoCheckedIds.length > 0 ? 'bg-amber-100 text-amber-600 border-amber-200' : 'bg-slate-50 text-slate-400 border-slate-100'}`}>{autoCheckedIds.length > 0 ? <Undo2 size={22}/> : <Wand2 size={22} />}</button>
+           {isAdmin && (
+             <button onClick={toggleAutoCheck} className={`w-12 h-12 flex items-center justify-center rounded-xl border transition-all ${autoCheckedIds.length > 0 ? 'bg-amber-100 text-amber-600 border-amber-200' : 'bg-slate-50 text-slate-400 border-slate-100'}`}>{autoCheckedIds.length > 0 ? <Undo2 size={22}/> : <Wand2 size={22} />}</button>
+           )}
            <button onClick={() => setStep('sign')} className={`flex-1 rounded-xl font-bold text-lg text-white shadow-lg flex items-center justify-center gap-2 active:scale-[0.98] transition-all ${stats.checked === stats.total ? 'bg-emerald-600' : 'bg-slate-800'}`}>
              {stats.checked === stats.total ? <><CheckCircle2 /> 完成并签署</> : '检查并导出'}
            </button>
@@ -657,11 +705,25 @@ export default function App() {
   if (state.step === 'sign') {
     const stats = getStats();
     const allFlatItems = CHECKLIST_DATA.map(s => flattenItemsForReport(s)).flat();
-    const pendingItems = allFlatItems.filter(item => (state.session[item.uniqueId]?.status || 'unchecked') === 'unchecked');
-    const flaggedItems = allFlatItems.filter(item => state.session[item.uniqueId]?.status === 'flagged');
+    const pendingItems = allFlatItems.filter(item => {
+        const s = state.session[item.uniqueId];
+        return (s?.status || 'unchecked') === 'unchecked';
+    });
+    // Flagged for sign check now includes Starred items because they need review!
+    const flaggedItems = getItemsForBatchShare(); 
+    // Wait, getItemsForBatchShare only filters status==='flagged' currently.
+    // For signing, we should block if there are flagged OR starred items?
+    // "Review" items are not technically blockers for signing unless process requires them cleared.
+    // Assuming Starred items are meant to be cleared (unstarred) before signing? Or just informational?
+    // User said "归为待处理项目类" (Classify as pending category). Pending usually blocks signing completion check.
+    
+    const starredItems = allFlatItems.filter(item => state.session[item.uniqueId]?.isStarred);
+
     const isAllCompleted = pendingItems.length === 0;
     const hasIssues = flaggedItems.length > 0;
-    const canSign = isAllCompleted && !hasIssues;
+    const hasStarred = starredItems.length > 0;
+    const canSign = isAllCompleted && !hasIssues && !hasStarred;
+
     return (
        <div className="min-h-screen bg-slate-100 flex flex-col">
          {showSignatureOverlay && (
@@ -685,18 +747,18 @@ export default function App() {
                  <div className="text-sm font-mono text-slate-500 bg-slate-100 px-2 py-1 rounded">B-{state.info.registration}</div>
             </div>
             <div className="p-4 space-y-6">
-               {!canSign && (
+               {!canSign && !isAdmin && (
                    <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
                        <div className="bg-slate-50 px-5 py-4 border-b border-slate-100 flex items-center gap-2">
                            <ClipboardList className="text-blue-500" size={20}/>
-                           <h2 className="font-bold text-lg text-slate-800">待处理项目 ({flaggedItems.length + pendingItems.length})</h2>
+                           <h2 className="font-bold text-lg text-slate-800">待处理项目 ({flaggedItems.length + pendingItems.length + starredItems.length})</h2>
                        </div>
                        <div className="p-5 space-y-8">
-                           {hasIssues && (
+                           {(hasIssues || hasStarred) && (
                                <div ref={issuesRef} className="bg-white rounded-xl">
                                    <div className="flex items-center justify-between mb-3 pb-2 border-b border-red-100">
                                        <h3 className="flex items-center gap-2 text-red-600 font-black text-sm uppercase tracking-wider">
-                                           <AlertTriangle size={16} /> 存在问题 (Issues)
+                                           <AlertTriangle size={16} /> 存在缺陷 / 回顾
                                        </h3>
                                        <button 
                                           onClick={handleShareIssues} 
@@ -708,7 +770,7 @@ export default function App() {
                                    </div>
                                    
                                    <div className="space-y-3">
-                                       {flaggedItems.map(item => (
+                                       {[...flaggedItems, ...starredItems].filter((v,i,a)=>a.findIndex(t=>(t.uniqueId===v.uniqueId))===i).map(item => (
                                            <CheckItem 
                                                key={item.uniqueId} 
                                                uniqueId={item.uniqueId} 
@@ -755,20 +817,22 @@ export default function App() {
                    </div>
                )}
 
-               {canSign && (
+               {(canSign || isAdmin) && (
                    <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                       
-                       {/* 1. Ready Block - Moved to Top */}
-                       <div className="bg-emerald-50 border border-emerald-100 rounded-2xl p-6 text-center">
-                           <div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-3"><CheckCircle2 size={32} /></div>
-                           <h3 className="text-lg font-bold text-emerald-800">已就绪</h3>
-                           <p className="text-emerald-600 text-sm">请依次拍照签名后再生成报告</p>
+                       <div className={`${isAdmin ? 'bg-indigo-50 border-indigo-100' : 'bg-emerald-50 border-emerald-100'} border rounded-2xl p-6 text-center`}>
+                           <div className={`w-16 h-16 ${isAdmin ? 'bg-indigo-100 text-indigo-600' : 'bg-emerald-100 text-emerald-600'} rounded-full flex items-center justify-center mx-auto mb-3`}>
+                             {isAdmin ? <ShieldCheck size={32} /> : <CheckCircle2 size={32} />}
+                           </div>
+                           <h3 className={`text-lg font-bold ${isAdmin ? 'text-indigo-800' : 'text-emerald-800'}`}>
+                               {isAdmin ? '管理员模式就绪' : '已就绪'}
+                           </h3>
+                           <p className={`${isAdmin ? 'text-indigo-600' : 'text-emerald-600'} text-sm`}>
+                               {isAdmin ? '您可以强制生成报告 (忽略检查项和签名)' : '请依次拍照签名后再生成报告'}
+                           </p>
                        </div>
 
-                       {/* 2. Selfie Block - Moved Below and Redesigned */}
                        <div className="bg-blue-50 border border-blue-100 rounded-2xl p-6 flex flex-col items-center">
                             <h3 className="text-lg font-bold text-blue-800 mb-4 flex items-center justify-center gap-2"><Camera size={20}/> 检查员自拍确认</h3>
-                            
                             <div className="flex flex-col items-center gap-4">
                                 {state.selfie ? (
                                     <div className="relative w-40 h-40 rounded-xl overflow-hidden shadow-md border-2 border-white">
@@ -779,20 +843,7 @@ export default function App() {
                                     </div>
                                 ) : (
                                     <div className="w-40 h-40 bg-slate-200 rounded-xl overflow-hidden relative shadow-inner border-2 border-slate-300">
-                                        <Webcam
-                                            audio={false}
-                                            ref={webcamRef}
-                                            screenshotFormat="image/jpeg"
-                                            videoConstraints={{ facingMode: "user" }}
-                                            className="w-full h-full object-cover"
-                                            mirrored={true}
-                                            disablePictureInPicture={false}
-                                            forceScreenshotSourceSize={false}
-                                            imageSmoothing={true}
-                                            onUserMedia={() => {}}
-                                            onUserMediaError={() => {}}
-                                            screenshotQuality={0.92}
-                                        />
+                                        <Webcam audio={false} ref={webcamRef} screenshotFormat="image/jpeg" videoConstraints={{ facingMode: "user" }} className="w-full h-full object-cover" mirrored={true} disablePictureInPicture={false} forceScreenshotSourceSize={false} imageSmoothing={true} onUserMedia={() => {}} onUserMediaError={() => {}} screenshotQuality={0.92} />
                                     </div>
                                 )}
 
@@ -804,14 +855,7 @@ export default function App() {
                             </div>
                        </div>
 
-                       {/* 3. Signature Area */}
-                       <div onClick={() => {
-                           if (!state.selfie) {
-                               alert("请先完成自拍确认");
-                               return;
-                           }
-                           setShowSignatureOverlay(true);
-                       }} className={`bg-white rounded-2xl border-2 border-dashed flex flex-col items-center justify-center min-h-[180px] relative transition-all ${state.signature ? 'border-blue-200 bg-blue-50/20' : 'border-slate-300 text-slate-400 active:bg-slate-50'}`}>
+                       <div onClick={() => { if (!state.selfie && !isAdmin) { alert("请先完成自拍确认"); return; } setShowSignatureOverlay(true); }} className={`bg-white rounded-2xl border-2 border-dashed flex flex-col items-center justify-center min-h-[180px] relative transition-all ${state.signature ? 'border-blue-200 bg-blue-50/20' : 'border-slate-300 text-slate-400 active:bg-slate-50'}`}>
                          {state.signature ? (
                            <>
                             <img src={state.signature} className="h-32 object-contain" />
@@ -830,49 +874,44 @@ export default function App() {
          </div>
          <div className="fixed bottom-0 left-0 w-full bg-white border-t border-slate-200 p-4 pb-6 px-6 z-40 flex gap-4">
              <button onClick={() => setStep('inspect')} className="px-6 py-4 rounded-xl font-bold bg-slate-100 text-slate-600">返回</button>
-             <button disabled={!canSign || !state.signature || !state.selfie || isGenerating} onClick={async () => { if (printRef.current) { setIsGenerating(true); try { const file = await generatePDF(state, printRef.current, reportHeaderRef.current); setGeneratedFile(file); } finally { setIsGenerating(false); } } }} className={`flex-1 rounded-xl font-bold text-white shadow-xl flex items-center justify-center gap-2 ${canSign && state.signature && state.selfie ? 'bg-blue-600' : 'bg-slate-300'}`}>
-                {isGenerating ? <div className="animate-spin rounded-full h-5 w-5 border-2 border-white/30 border-t-white" /> : <><Download /> 生成报告</>}
+             <button disabled={(!isAdmin && (!canSign || !state.signature || !state.selfie)) || isGenerating} onClick={handleGeneratePDF} className={`flex-1 rounded-xl font-bold text-white shadow-xl flex items-center justify-center gap-2 ${(canSign && state.signature && state.selfie) || isAdmin ? (isAdmin ? 'bg-indigo-600' : 'bg-blue-600') : 'bg-slate-300'}`}>
+                {isGenerating ? <div className="animate-spin rounded-full h-5 w-5 border-2 border-white/30 border-t-white" /> : <><Download /> {isAdmin ? '强制生成报告' : '生成报告'}</>}
              </button>
          </div>
 
-         {/* Hidden Header for PDF Repeating Header (Bilingual) */}
-         <div ref={reportHeaderRef} style={{ position: 'absolute', top: -9999, left: -9999, width: '210mm' }} className="bg-white px-6 py-2 border-b border-slate-300 flex items-center justify-between">
-            <div className="text-xs font-bold text-slate-700">注册号 REG: B-{state.info.registration}</div>
-            <div className="text-xs font-bold text-slate-700 flex items-center gap-2">
+         <div ref={reportHeaderRef} style={{ position: 'absolute', top: -9999, left: -9999, width: '210mm' }} className="bg-white px-6 py-2 border-b border-black/50 flex items-center justify-between">
+            <div className="text-xs font-bold text-black">注册号 REG: B-{state.info.registration}</div>
+            <div className="text-xs font-bold text-black flex items-center gap-2">
                 检查员 Inspector: {state.info.inspectorName}
                 {state.signature && <img src={state.signature} className="h-6 object-contain" />}
             </div>
-            <div className="text-xs font-bold text-slate-700">日期 Date: {state.info.date}</div>
+            <div className="text-xs font-bold text-black">日期 Date: {state.info.date}</div>
          </div>
 
-         <div className="fixed top-0 left-[-9999px] w-[210mm] bg-white text-slate-900 pointer-events-none" ref={printRef}>
-            <div id="print-container">
+         <div className="fixed top-0 left-[-9999px] w-[210mm] bg-white text-black pointer-events-none" ref={printRef}>
+            <div id="print-container" style={{ WebkitFontSmoothing: 'antialiased', textRendering: 'geometricPrecision' }}>
                <div className="break-inside-avoid p-6 pb-0">
-                   {/* Updated Report Header Box */}
-                   <div className="border-4 border-slate-900 p-4 mb-4 flex flex-col items-center justify-center">
-                       <h1 className="text-2xl font-black text-slate-900 leading-none mb-2">飞机最终检查单 AIRCRAFT FINAL INSPECTION</h1>
-                       <div className="text-sm font-bold text-slate-600 tracking-[0.2em] uppercase">客舱车间 CABIN WORKSHOP</div>
+                   <div className="border-4 border-black p-4 mb-4 flex flex-col items-center justify-center">
+                       <h1 className="text-2xl font-black text-black leading-none mb-2">飞机最终检查单 AIRCRAFT FINAL INSPECTION</h1>
+                       <div className="text-sm font-bold text-black tracking-[0.2em] uppercase">客舱车间 CABIN WORKSHOP</div>
                    </div>
                    
-                   {/* Resume-style Info Block */}
-                   <div className="flex border-2 border-slate-800 mb-2 bg-slate-50">
-                     {/* Left Column: Basic Info */}
+                   <div className="flex border-2 border-black mb-2 bg-slate-50">
                      <div className="flex-1 p-3 flex flex-col justify-center gap-4">
                          <div>
                              <div className="text-[10px] font-bold text-slate-500 uppercase">注册号 REG</div>
-                             <div className="text-2xl font-black font-mono">B-{state.info.registration}</div>
+                             <div className="text-2xl font-black font-mono text-black">B-{state.info.registration}</div>
                          </div>
                          <div>
                              <div className="text-[10px] font-bold text-slate-500 uppercase">日期 DATE</div>
-                             <div className="text-xl font-bold font-mono">{state.info.date}</div>
+                             <div className="text-xl font-bold font-mono text-black">{state.info.date}</div>
                          </div>
                      </div>
 
-                     {/* Middle Column: Inspector & Signature */}
-                     <div className="flex-1 p-3 border-l-2 border-slate-800 flex flex-col justify-between">
+                     <div className="flex-1 p-3 border-l-2 border-black flex flex-col justify-between">
                         <div>
                              <div className="text-[10px] font-bold text-slate-500 uppercase">检查员 INSPECTOR</div>
-                             <div className="text-xl font-bold">{state.info.inspectorName}</div>
+                             <div className="text-xl font-bold text-black">{state.info.inspectorName}</div>
                         </div>
                         <div className="mt-2">
                              <div className="text-[10px] font-bold text-slate-500 uppercase">签名 SIGNATURE</div>
@@ -880,8 +919,7 @@ export default function App() {
                         </div>
                      </div>
 
-                     {/* Right Column: Selfie Photo - Added padding for white border effect */}
-                     <div className="w-32 border-l-2 border-slate-800 bg-white p-1">
+                     <div className="w-32 border-l-2 border-black bg-white p-1">
                         {state.selfie ? (
                             <img src={state.selfie} className="w-full h-full object-cover block" />
                         ) : (
@@ -890,19 +928,19 @@ export default function App() {
                      </div>
                    </div>
 
-                   {/* Requirements Block */}
-                   <div className="border-2 border-slate-800 border-t-0 p-3 mb-4 bg-white">
-                      <div className="font-bold text-slate-900 mb-1 border-b border-slate-200 pb-1">检查要求 / REQUIREMENTS</div>
+                   <div className="border-2 border-black border-t-0 p-3 mb-4 bg-white">
+                      <div className="font-bold text-black mb-1 border-b border-slate-300 pb-1">检查要求 / REQUIREMENTS</div>
                       {REPORT_REQUIREMENTS.map((req, i) => (
-                        <div key={i} className="text-sm font-bold text-slate-800 leading-snug mb-0.5 last:mb-0">{req}</div>
+                        <div key={i} className="text-sm font-bold text-red-600 leading-snug mb-0.5 last:mb-0">{req}</div>
                       ))}
                    </div>
                </div>
+               
+               {/* Main Checklist */}
                <div className="px-6 space-y-4">
                  {CHECKLIST_DATA.map(section => (
                    <div key={section.id} className="section-block">
-                      {/* Cleaned section title */}
-                      <div className="break-inside-avoid bg-slate-800 text-white font-bold px-3 py-1 text-sm uppercase mb-1">{cleanText(section.title)}</div>
+                      <div className="break-inside-avoid bg-black text-white font-black px-4 py-2 text-xl uppercase mb-1 flex items-center justify-center tracking-wider">{cleanText(section.title)}</div>
                       <div className="">
                           {flattenItemsForReport(section).map((item, idx) => {
                              const entry = state.session[item.uniqueId];
@@ -910,27 +948,31 @@ export default function App() {
                              const isHighlight = HIGHLIGHT_RED_IDS.includes(item.uniqueId);
 
                              return (
-                               <div key={item.uniqueId} className={`flex border border-slate-300 break-inside-avoid -mt-[1px] relative z-10 ${idx%2===0 ? 'bg-white':'bg-slate-50'}`}>
-                                 {/* Increased text size to text-sm, centered content */}
-                                 <div className="p-2 pl-2 w-3/4 border-r border-slate-300 text-sm flex items-center">
-                                   <div className={`font-bold leading-snug ${isHighlight ? 'text-red-600' : 'text-slate-700'}`}>
+                               <div key={item.uniqueId} className={`flex border border-slate-400 break-inside-avoid -mt-[1px] relative z-10 ${idx%2===0 ? 'bg-white':'bg-slate-50'}`}>
+                                 <div className="p-2 pl-3 w-3/4 border-r border-slate-400 text-sm flex items-center">
+                                   <div className={`font-bold leading-snug ${isHighlight ? 'text-red-600' : 'text-black'}`}>
                                      {cleanText(item.label)} 
-                                     {item.subLabel && <span className="bg-slate-200 px-1 rounded text-[10px] ml-1 text-slate-600">{cleanText(item.subLabel)}</span>}
+                                     {item.subLabel && (
+                                         <span className="bg-slate-200 inline-flex items-center justify-center h-6 px-2 rounded-md text-xs ml-2 text-black font-black leading-none pt-[1px]">
+                                             {cleanText(item.subLabel)}
+                                         </span>
+                                     )}
                                    </div>
                                  </div>
-                                 <div className="p-2 w-1/4 text-center flex flex-col items-center justify-center">
-                                   {status === 'ok' && <span className="font-bold text-emerald-700 text-sm">OK</span>}
-                                   {status === 'na' && <span className="font-bold text-slate-400 text-sm">N/A</span>}
-                                   {status === 'flagged' && <span className="font-bold text-white bg-red-500 px-2 py-0.5 rounded text-xs">问题 ISSUE</span>}
-                                   
-                                   {entry?.timestamp && (
-                                     <div className="text-[8px] text-slate-400 font-mono mt-0.5">
-                                       {format(new Date(entry.timestamp), 'HH:mm')}
-                                     </div>
-                                   )}
-
+                                 <div className="p-2 w-1/4 flex flex-col items-center justify-center">
+                                    <div className="flex items-center justify-center gap-2 h-full my-auto">
+                                        {status === 'ok' && <span className="font-black text-emerald-800 text-xl leading-none">OK</span>}
+                                        {status === 'na' && <span className="font-bold text-slate-400 text-sm">N/A</span>}
+                                        {status === 'flagged' && <span className="font-bold text-white bg-red-600 px-2 py-0.5 rounded text-xs">ISSUE</span>}
+                                        
+                                        {entry?.timestamp && (
+                                        <span className="text-base text-black font-mono font-bold leading-none translate-y-[1px]">
+                                            {format(new Date(entry.timestamp), 'HH:mm')}
+                                        </span>
+                                        )}
+                                    </div>
                                    {entry?.value && (
-                                     <div className="mt-1 text-[10px] border border-slate-300 inline-block px-1 rounded bg-white">{entry.value} PSI</div>
+                                     <div className={`mt-1 text-[10px] border border-black inline-block px-1 rounded font-bold ${entry.value === 'RED' ? 'bg-red-500 text-white' : entry.value === 'YELLOW' ? 'bg-yellow-400 text-black' : entry.value === 'GREEN' ? 'bg-emerald-500 text-white' : 'bg-white text-black'}`}>{entry.value} PSI</div>
                                    )}
                                  </div>
                                </div>
@@ -940,6 +982,79 @@ export default function App() {
                    </div>
                  ))}
                </div>
+
+               {/* Rectification & Defects Section - Support History */}
+               {getRectifiedOrFlaggedItems().length > 0 && (
+                 <div className="px-6 mt-8 pt-4 border-t-2 border-slate-300">
+                    <div className="bg-slate-900 text-white font-black px-4 py-3 text-xl uppercase mb-4 flex items-center justify-center tracking-wider break-inside-avoid">
+                        故障及整改记录 / DEFECTS & RECTIFICATION RECORDS
+                    </div>
+                    <div className="space-y-6">
+                        {getRectifiedOrFlaggedItems().map((item, i) => {
+                            const entry = state.session[item.uniqueId];
+                            const allRecords = [
+                                ...(entry.history || []),
+                                { 
+                                    issueNote: entry.issueNote, 
+                                    issuePhotos: entry.issuePhotos, 
+                                    rectification: entry.rectification,
+                                    timestamp: entry.timestamp,
+                                    isCurrent: true 
+                                }
+                            ].filter(r => r.issueNote || r.rectification);
+
+                            return (
+                                <div key={i} className="border-2 border-slate-400 p-0 flex flex-col bg-white break-inside-avoid">
+                                    <div className="bg-slate-100 p-2 border-b-2 border-slate-400 font-bold text-black flex justify-between items-center">
+                                        <span>#{i+1} - {cleanText(item.label)} {item.subLabel ? `(${item.subLabel})` : ''}</span>
+                                        <span className="text-xs bg-slate-200 px-2 py-1 rounded">ID: {item.uniqueId}</span>
+                                    </div>
+                                    
+                                    {allRecords.map((rec: any, idx) => (
+                                        <div key={idx} className={`flex ${idx > 0 ? 'border-t-2 border-slate-300' : ''}`}>
+                                            {/* Issue Column */}
+                                            <div className="flex-1 p-3 border-r-2 border-slate-400">
+                                                <div className="flex justify-between items-center mb-1">
+                                                    <div className="text-[10px] font-bold text-slate-500 uppercase">发现问题 FINDING {rec.isCurrent ? '(CURRENT)' : '(HISTORY)'}</div>
+                                                    <div className="text-[10px] font-mono text-slate-400">{rec.timestamp ? format(new Date(rec.timestamp), 'HH:mm') : ''}</div>
+                                                </div>
+                                                <div className="font-bold text-red-600 text-sm mb-2">{rec.issueNote || '未记录详细描述'}</div>
+                                                {rec.issuePhotos && rec.issuePhotos.length > 0 && (
+                                                    <div className="grid grid-cols-2 gap-2 mt-2">
+                                                        {rec.issuePhotos.map((p: string, pIdx: number) => (
+                                                            <div key={pIdx} className="w-full h-32 border border-slate-200 bg-black/5 flex items-center justify-center overflow-hidden">
+                                                                <img src={p} className="max-w-full max-h-full object-contain" />
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                            </div>
+                                            {/* Rectification Column */}
+                                            <div className="flex-1 p-3 bg-emerald-50/30">
+                                                <div className="flex justify-between items-center mb-1">
+                                                    <div className="text-[10px] font-bold text-slate-500 uppercase">整改措施 RECTIFICATION</div>
+                                                    <div className="text-[10px] font-mono text-slate-400">{rec.rectification?.timestamp ? format(new Date(rec.rectification.timestamp), 'HH:mm') : ''}</div>
+                                                </div>
+                                                <div className="font-bold text-emerald-800 text-sm mb-2">{rec.rectification?.method || (rec.isCurrent && entry.status === 'flagged' ? '待整改 (Pending)' : '已解决')}</div>
+                                                
+                                                {rec.rectification?.photos && rec.rectification.photos.length > 0 && (
+                                                    <div className="grid grid-cols-2 gap-2 mt-2">
+                                                        {rec.rectification.photos.map((p: string, pIdx: number) => (
+                                                             <div key={pIdx} className="w-full h-32 border border-slate-200 bg-white flex items-center justify-center overflow-hidden">
+                                                                <img src={p} className="max-w-full max-h-full object-contain" />
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            );
+                        })}
+                    </div>
+                 </div>
+               )}
             </div>
          </div>
          {generatedFile && (
@@ -957,7 +1072,7 @@ export default function App() {
            </div>
          )}
          
-         {/* 隐藏的 DOM 容器：用于生成“所有问题”的汇总长图 */}
+         {/* Hidden Batch Share Image Template */}
          <div 
              ref={allIssuesExportRef} 
              style={{ display: 'none', position: 'absolute', top: 0, left: 0, width: '600px', backgroundColor: '#f8fafc', padding: '40px', borderRadius: '24px', zIndex: -1 }}
@@ -967,7 +1082,6 @@ export default function App() {
                    <h2 className="text-4xl font-black text-slate-900 leading-none">发现报告</h2>
                    <div className="text-base font-bold text-slate-500 uppercase tracking-[0.3em] mt-2">FINDING REPORT</div>
                 </div>
-                {/* Optional right side header info if needed */}
              </div>
              
              <div className="flex justify-between bg-white p-6 rounded-3xl border border-slate-200 mb-10 shadow-sm">
@@ -977,11 +1091,10 @@ export default function App() {
              </div>
 
              <div className="space-y-12">
-                 {flaggedItems.map((item, idx) => {
+                 {getItemsForBatchShare().map((item, idx) => {
                      const entry = state.session[item.uniqueId];
                      return (
                          <div key={item.uniqueId} className="break-inside-avoid">
-                             {/* 醒目的条目卡片设计 */}
                              <div className="bg-white border-l-[16px] border-red-500 pl-8 py-6 mb-6 rounded-r-3xl shadow-xl border-y border-r border-slate-200">
                                 <div className="text-xs font-bold text-red-400 uppercase mb-2 tracking-wider">Finding #{idx + 1}</div>
                                 {item.subLabel && (
@@ -1006,14 +1119,14 @@ export default function App() {
                                </div>
                              )}
 
-                             {entry?.photos && entry.photos.length > 0 && (
+                             {entry?.issuePhotos && entry.issuePhotos.length > 0 && (
                                <div className="px-2">
                                    <div className="flex items-center gap-2 mb-4 border-b border-slate-200 pb-2">
                                         <div className="w-1 h-4 bg-blue-500 rounded-full"></div>
                                         <div className="text-sm font-bold text-slate-400 uppercase">现场照片 / Photos</div>
                                    </div>
                                    <div className="flex flex-col gap-6">
-                                     {entry.photos.map((p, pIdx) => (
+                                     {entry.issuePhotos.map((p, pIdx) => (
                                        <div key={pIdx} className="w-full rounded-2xl overflow-hidden border border-slate-200 shadow-lg bg-white relative">
                                          <img src={p} className="w-full h-auto block" />
                                          <div className="absolute bottom-3 right-3 bg-black/70 backdrop-blur-sm text-white text-xs px-3 py-1.5 rounded-full font-bold">
@@ -1025,7 +1138,7 @@ export default function App() {
                                </div>
                              )}
                              
-                             {idx < flaggedItems.length - 1 && <div className="border-b-4 border-slate-200 my-10"></div>}
+                             {idx < getItemsForBatchShare().length - 1 && <div className="border-b-4 border-slate-200 my-10"></div>}
                          </div>
                      );
                  })}

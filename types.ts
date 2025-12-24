@@ -23,12 +23,39 @@ export interface SectionConfig {
 
 export type ItemStatus = 'unchecked' | 'ok' | 'na' | 'flagged';
 
+export interface Rectification {
+  method: string;
+  photos: string[];
+  timestamp: string;
+}
+
+export interface HistoryEntry {
+  id: string;
+  issueNote: string;
+  issuePhotos: string[];
+  rectification?: Rectification;
+  timestamp: string; // Time of defect finding
+}
+
 export interface CheckEntry {
   status: ItemStatus;
+  isStarred?: boolean; // New: For "Review Needed" functionality
   timestamp: string | null;
   value?: string; // For inputs
+  
+  // Normal Record
+  photos: string[]; 
+  note?: string;
+
+  // Current Active Defect
   issueNote?: string;
-  photos: string[]; // Combined evidence and issue photos
+  issuePhotos: string[]; 
+  
+  // Current Rectification (Active)
+  rectification?: Rectification; 
+
+  // Past Records (for multiple cycles)
+  history?: HistoryEntry[];
 }
 
 // Flat map of all items (flattening sub-items into unique keys)
