@@ -9,7 +9,7 @@ import html2canvas from 'html2canvas';
 import Webcam from 'react-webcam';
 import { 
   Plane, User, Calendar, ChevronRight, CheckCircle2, 
-  AlertTriangle, RotateCcw, PenTool, Camera, Download, LayoutList, Share2, FileCheck, Edit2, X, Trash2, Wand2, Undo2, Smartphone, RotateCw, ArrowLeft, ClipboardList, RefreshCw, History, ShieldCheck, Wrench, Send, Star
+  AlertTriangle, RotateCcw, PenTool, Camera, Download, LayoutList, Share2, FileCheck, Edit2, X, Trash2, Wand2, Undo2, Smartphone, RotateCw, ArrowLeft, ClipboardList, RefreshCw, History, ShieldCheck, Wrench, Send, Star, Check
 } from 'lucide-react';
 import { format } from 'date-fns';
 
@@ -197,7 +197,7 @@ export default function App() {
       ...prev,
       session: {
         ...prev.session,
-        [uniqueId]: { ...(prev.session[uniqueId] || { status: 'unchecked', timestamp: null, photos: [], issuePhotos: [] }), ...updates }
+        [uniqueId]: { ...(prev.session[uniqueId] || { status: 'unchecked', photos: [], issuePhotos: [] }), ...updates }
       }
     }));
   };
@@ -479,7 +479,6 @@ export default function App() {
   if (state.step === 'welcome') {
     return (
       <div className="h-[100dvh] w-full bg-slate-50 text-slate-900 flex flex-col items-center overflow-y-auto p-6 safe-area-inset-bottom relative">
-        <div className="absolute top-6 right-6 text-[10px] text-slate-300 font-mono z-20">© 802711</div>
         {/* ... Changelog Modal ... */}
         {showChangelog && (
             <div className="fixed inset-0 z-[120] bg-black/60 backdrop-blur-sm flex items-center justify-center p-6 animate-in fade-in duration-200" onClick={() => setShowChangelog(false)}>
@@ -509,20 +508,20 @@ export default function App() {
             </div>
         )}
 
-        <div className="flex-1 w-full max-w-md flex flex-col justify-evenly py-2 min-h-[500px]">
-            <div className="text-center space-y-4 pt-2 shrink-0">
-                {/* Req 2: App Icon Update - Paper Plane + Check */}
-                <div className="relative w-24 h-24 mx-auto">
-                    <Send size={80} className="text-emerald-500 -rotate-12 absolute top-0 left-0" strokeWidth={1.5} />
-                    <div className="absolute bottom-0 right-0 bg-white rounded-full p-1">
-                        <CheckCircle2 size={40} className="text-emerald-500 fill-white" />
+        <div className="flex-1 w-full max-w-md flex flex-col py-2 min-h-[500px] gap-6">
+            <div className="flex items-center justify-center gap-6 pt-4 shrink-0">
+                {/* Updated Icon - Green Paper Plane with Check Badge */}
+                <div className="relative w-20 h-20 shrink-0">
+                    <Send size={70} className="text-[#22c55e] -rotate-12 absolute top-0 left-0 drop-shadow-sm" strokeWidth={1.5} fill="white" />
+                    <div className="absolute bottom-1 right-0 bg-[#22c55e] rounded-full p-1.5 border-4 border-slate-50">
+                        <Check size={14} className="text-white" strokeWidth={3} />
                     </div>
                 </div>
                 
-                <div>
+                <div className="text-left">
                     <h1 className="text-3xl font-black tracking-tight text-slate-900">最终检查清单</h1>
-                    <div className="flex items-center justify-center gap-2 mt-2">
-                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em]">Final Inspection Card</p>
+                    <div className="flex items-center gap-2 mt-2">
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em]">Final Inspection</p>
                         <button 
                             onClick={() => setShowChangelog(true)} 
                             className="bg-slate-100 hover:bg-slate-200 text-slate-500 text-[10px] font-bold px-2 py-0.5 rounded-md transition-colors"
@@ -533,34 +532,37 @@ export default function App() {
                 </div>
             </div>
 
-          <div className="bg-white p-6 rounded-[2rem] space-y-5 shadow-sm border border-slate-100 w-full shrink-0">
+          <div className="bg-white p-5 rounded-[1.5rem] space-y-4 shadow-sm border border-slate-100 w-full shrink-0">
             <div>
               <label className="text-[10px] font-bold text-slate-400 uppercase mb-1.5 block pl-1">注册号 / REG</label>
-              <div className="flex bg-slate-50 rounded-2xl border border-slate-200 overflow-hidden focus-within:border-blue-500 transition-all relative">
-                <div className="px-4 py-4 text-slate-500 font-mono font-bold text-lg bg-slate-100 border-r border-slate-200 flex items-center select-none z-10 shrink-0">B-</div>
+              <div className="flex bg-slate-50 rounded-xl border border-slate-200 overflow-hidden focus-within:border-blue-500 transition-all relative">
+                <div className="px-4 py-3.5 text-slate-500 font-mono font-bold text-lg bg-slate-100 border-r border-slate-200 flex items-center select-none z-10 shrink-0">B-</div>
                 <input type="text" className="flex-1 bg-transparent px-4 text-xl font-black uppercase outline-none text-slate-800 z-10 min-w-0" placeholder="XXXX" value={state.info.registration} onChange={e => setState(s => ({...s, info: {...s.info, registration: e.target.value.toUpperCase()}}))} />
               </div>
             </div>
             <div>
               <label className="text-[10px] font-bold text-slate-400 uppercase mb-1.5 block pl-1">检查员 / Inspector</label>
-              <div className="flex items-center bg-slate-50 rounded-2xl border border-slate-200 px-4 py-1 focus-within:border-blue-500 transition-all">
+              <div className="flex items-center bg-slate-50 rounded-xl border border-slate-200 px-4 py-0.5 focus-within:border-blue-500 transition-all">
                 {isAdmin ? <ShieldCheck size={18} className="text-blue-500 mr-3 shrink-0" /> : <User size={18} className="text-slate-400 mr-3 shrink-0" />}
-                <input type="text" className="flex-1 bg-transparent py-4 font-bold text-base outline-none text-slate-800 min-w-0" placeholder="请输入姓名" value={state.info.inspectorName} onChange={e => setState(s => ({...s, info: {...s.info, inspectorName: e.target.value}}))} />
+                <input type="text" className="flex-1 bg-transparent py-3.5 font-bold text-base outline-none text-slate-800 min-w-0" placeholder="请输入姓名" value={state.info.inspectorName} onChange={e => setState(s => ({...s, info: {...s.info, inspectorName: e.target.value}}))} />
               </div>
             </div>
-            <button disabled={!state.info.registration || !state.info.inspectorName} onClick={() => setStep('inspect')} className={`w-full text-white font-bold py-4 rounded-2xl text-lg shadow-xl disabled:opacity-50 active:scale-[0.98] transition-all flex items-center justify-center gap-2 mt-2 ${isAdmin ? 'bg-indigo-600 shadow-indigo-200' : 'bg-[#007AFF] shadow-blue-200'}`}>
+            <button disabled={!state.info.registration || !state.info.inspectorName} onClick={() => setStep('inspect')} className={`w-full text-white font-bold py-3.5 rounded-xl text-lg shadow-xl disabled:opacity-50 active:scale-[0.98] transition-all flex items-center justify-center gap-2 mt-2 ${isAdmin ? 'bg-indigo-600 shadow-indigo-200' : 'bg-[#007AFF] shadow-blue-200'}`}>
                 {isAdmin ? '管理员模式检查' : '开始检查'} <ChevronRight size={20} />
             </button>
           </div>
 
-          <div className="bg-orange-50/60 p-5 rounded-2xl border border-orange-100 text-left w-full shrink-0">
-            <strong className="text-red-600 text-xs font-black uppercase tracking-wider block mb-2 flex items-center gap-2"><AlertTriangle size={14}/> 务必注意 / ATTENTION</strong>
-            <div className="space-y-1.5 text-[11px] text-orange-800 leading-snug font-bold opacity-80">
+          <div className="bg-orange-50/60 p-6 rounded-3xl border border-orange-100 text-left w-full flex-1 flex flex-col justify-center">
+            <strong className="text-red-600 text-sm font-black uppercase tracking-wider block mb-4 flex items-center gap-2"><AlertTriangle size={16}/> 务必注意 / ATTENTION</strong>
+            <div className="space-y-2.5 text-xs text-orange-800 leading-relaxed font-bold opacity-80">
                {INSPECTOR_REQUIREMENTS.map((req, i) => (
                   <p key={i}>{req}</p>
                ))}
             </div>
           </div>
+        </div>
+        <div className="absolute bottom-4 w-full text-center text-[10px] text-slate-300 font-mono z-20">
+            Powered By 802711
         </div>
       </div>
     );
@@ -691,7 +693,7 @@ export default function App() {
                        <div className="flex flex-col gap-3">
                          {items.map(item => {
                            if (item.type === 'simple') {
-                             return <CheckItem key={item.id} uniqueId={item.id} label={item.text} requiresInput={item.requiresInput} inputLabel={item.inputLabel} pressureType={item.pressureType} entry={state.session[item.id]} onUpdate={updateSession} info={state.info} />;
+                             return <CheckItem key={item.id} uniqueId={item.id} label={item.text} requiresInput={item.requiresInput} inputLabel={item.inputLabel} pressureType={item.pressureType} entry={state.session[item.id]} onUpdate={updateSession} info={state.info} sectionTitle={cleanText(section.title)} />;
                            } else {
                              const subIds = item.subItems?.map(sub => `${item.id}_${sub.id}`) || [];
                              const subEntries = subIds.map(id => state.session[id]);
@@ -732,6 +734,7 @@ export default function App() {
                                                    inputLabel={item.inputLabel}
                                                    pressureType={item.pressureType}
                                                    info={state.info}
+                                                   sectionTitle={cleanText(section.title)}
                                                  />
                                              </div>
                                          );
@@ -761,471 +764,6 @@ export default function App() {
            </button>
         </div>
       </div>
-    );
-  }
-
-  // ... (Sign Screen Logic - same as before) ...
-  if (state.step === 'sign') {
-    const stats = getStats();
-    const allFlatItems = CHECKLIST_DATA.map(s => flattenItemsForReport(s)).flat();
-    const pendingItems = allFlatItems.filter(item => {
-        const s = state.session[item.uniqueId];
-        return (s?.status || 'unchecked') === 'unchecked';
-    });
-    const flaggedItems = getItemsForBatchShare(); 
-    
-    const starredItems = allFlatItems.filter(item => state.session[item.uniqueId]?.isStarred);
-
-    const isAllCompleted = pendingItems.length === 0;
-    const hasIssues = flaggedItems.length > 0;
-    const hasStarred = starredItems.length > 0;
-    const canSign = isAllCompleted && !hasIssues && !hasStarred;
-
-    return (
-       <div className="min-h-screen bg-slate-100 flex flex-col">
-         {/* ... Signature Overlay ... */}
-         {showSignatureOverlay && (
-           <div className="fixed inset-0 z-[100] bg-white flex flex-col">
-              <div className="absolute top-4 left-6 z-10 flex flex-col gap-2">
-                <span className="bg-slate-900/80 backdrop-blur px-3 py-1 rounded-full text-white text-[10px] font-bold flex items-center gap-1"><Smartphone className="rotate-90" size={12}/> 请横屏持机签署</span>
-              </div>
-              <div ref={sigContainerRef} className="flex-1 relative bg-white overflow-hidden sig-canvas-container">
-                {/* @ts-ignore */}
-                <SignatureCanvas ref={sigPadRef} canvasProps={{ className: 'sigCanvas' }} penColor='black' velocityFilterWeight={0.6} minWidth={1.5} maxWidth={5.5} />
-              </div>
-              <div className="absolute bottom-6 w-full flex justify-center gap-6 z-20 pointer-events-none">
-                 <button onClick={() => sigPadRef.current?.clear()} className="pointer-events-auto w-12 h-12 bg-white border border-slate-200 text-slate-500 rounded-full flex items-center justify-center rotate-90 shadow-md active:bg-slate-100"><Trash2 size={20} /></button>
-                 <button onClick={finalizeSignature} className="pointer-events-auto w-12 h-12 bg-blue-600 text-white rounded-full flex items-center justify-center rotate-90 shadow-lg active:scale-95"><CheckCircle2 size={20} /></button>
-                 <button onClick={() => setShowSignatureOverlay(false)} className="pointer-events-auto w-12 h-12 bg-white border border-slate-200 text-slate-500 rounded-full flex items-center justify-center rotate-90 shadow-sm active:bg-slate-100"><X size={20} /></button>
-              </div>
-           </div>
-         )}
-         
-         {/* ... Main Sign Screen Content ... */}
-         <div className="flex-1 overflow-y-auto pb-24">
-            <div className="sticky top-0 z-20 bg-white border-b border-slate-200 px-6 py-4 flex justify-between items-center shadow-sm">
-                 <h2 className="text-xl font-bold text-slate-800">签署报告</h2>
-                 <div className="text-sm font-mono text-slate-500 bg-slate-100 px-2 py-1 rounded">B-{state.info.registration}</div>
-            </div>
-            <div className="p-4 space-y-6">
-               {!canSign && !isAdmin && (
-                   <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-                       <div className="bg-slate-50 px-5 py-4 border-b border-slate-100 flex items-center gap-2">
-                           <ClipboardList className="text-blue-500" size={20}/>
-                           <h2 className="font-bold text-lg text-slate-800">待处理项目 ({flaggedItems.length + pendingItems.length + starredItems.length})</h2>
-                       </div>
-                       <div className="p-5 space-y-8">
-                           {(hasIssues || hasStarred) && (
-                               <div ref={issuesRef} className="bg-white rounded-xl">
-                                   <div className="flex items-center justify-between mb-3 pb-2 border-b border-red-100">
-                                       <h3 className="flex items-center gap-2 text-red-600 font-black text-sm uppercase tracking-wider">
-                                           <AlertTriangle size={16} /> 存在缺陷 / 回顾
-                                       </h3>
-                                       {/* Share Issues Button - Corrected Arrow */}
-                                       <button 
-                                          onClick={handleShareIssues} 
-                                          data-html2canvas-ignore
-                                          className="flex items-center gap-1.5 text-xs font-bold bg-red-50 text-red-600 px-3 py-1.5 rounded-lg border border-red-100 active:scale-95 transition-all shadow-sm"
-                                       >
-                                           <Share2 size={14}/> 分享缺陷 → 整改
-                                       </button>
-                                   </div>
-                                   
-                                   <div className="space-y-3">
-                                       {[...flaggedItems, ...starredItems].filter((v,i,a)=>a.findIndex(t=>(t.uniqueId===v.uniqueId))===i).map(item => (
-                                           <CheckItem 
-                                               key={item.uniqueId} 
-                                               uniqueId={item.uniqueId} 
-                                               label={item.label} 
-                                               subLabel={item.subLabel}
-                                               entry={state.session[item.uniqueId]} 
-                                               onUpdate={updateSession}
-                                               requiresInput={item.config.requiresInput}
-                                               inputLabel={item.config.inputLabel}
-                                               pressureType={item.config.pressureType}
-                                               isSubItem={true}
-                                               info={state.info}
-                                           />
-                                       ))}
-                                   </div>
-                               </div>
-                           )}
-
-                           {pendingItems.length > 0 && (
-                               <div>
-                                   <h3 className="flex items-center gap-2 text-slate-400 font-bold text-sm uppercase tracking-wider mb-3 pb-2 border-b border-slate-100">
-                                       <div className="w-4 h-4 rounded-full border-2 border-slate-300" /> 未检查 (Pending)
-                                   </h3>
-                                   <div className="space-y-3">
-                                       {pendingItems.map(item => (
-                                           <CheckItem 
-                                               key={item.uniqueId} 
-                                               uniqueId={item.uniqueId} 
-                                               label={item.label} 
-                                               subLabel={item.subLabel}
-                                               entry={state.session[item.uniqueId]} 
-                                               onUpdate={updateSession}
-                                               requiresInput={item.config.requiresInput}
-                                               inputLabel={item.config.inputLabel}
-                                               pressureType={item.config.pressureType}
-                                               isSubItem={true}
-                                               info={state.info}
-                                           />
-                                       ))}
-                                   </div>
-                               </div>
-                           )}
-                       </div>
-                   </div>
-               )}
-
-               {(canSign || isAdmin) && (
-                   <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                       <div className={`${isAdmin ? 'bg-indigo-50 border-indigo-100' : 'bg-emerald-50 border-emerald-100'} border rounded-2xl p-6 text-center`}>
-                           <div className={`w-16 h-16 ${isAdmin ? 'bg-indigo-100 text-indigo-600' : 'bg-emerald-100 text-emerald-600'} rounded-full flex items-center justify-center mx-auto mb-3`}>
-                             {isAdmin ? <ShieldCheck size={32} /> : <CheckCircle2 size={32} />}
-                           </div>
-                           <h3 className={`text-lg font-bold ${isAdmin ? 'text-indigo-800' : 'text-emerald-800'}`}>
-                               {isAdmin ? '管理员模式就绪' : '已就绪'}
-                           </h3>
-                           <p className={`${isAdmin ? 'text-indigo-600' : 'text-emerald-600'} text-sm`}>
-                               {isAdmin ? '您可以强制生成报告 (忽略检查项和签名)' : '请依次拍照签名后再生成报告'}
-                           </p>
-                       </div>
-
-                       <div className="bg-blue-50 border border-blue-100 rounded-2xl p-6 flex flex-col items-center">
-                            <h3 className="text-lg font-bold text-blue-800 mb-4 flex items-center justify-center gap-2"><Camera size={20}/> 检查员自拍确认</h3>
-                            <div className="flex flex-col items-center gap-4">
-                                {state.selfie ? (
-                                    <div className="relative w-40 h-40 rounded-xl overflow-hidden shadow-md border-2 border-white">
-                                        <img src={state.selfie} className="w-full h-full object-cover" />
-                                        <button onClick={() => setState(s => ({...s, selfie: null}))} className="absolute top-1 right-1 p-1 bg-white/80 rounded-full text-slate-600 shadow-sm backdrop-blur">
-                                            <RefreshCw size={14} />
-                                        </button>
-                                    </div>
-                                ) : (
-                                    <div className="w-40 h-40 bg-slate-200 rounded-xl overflow-hidden relative shadow-inner border-2 border-slate-300">
-                                        <Webcam audio={false} ref={webcamRef} screenshotFormat="image/jpeg" videoConstraints={{ facingMode: "user" }} className="w-full h-full object-cover" mirrored={true} disablePictureInPicture={false} forceScreenshotSourceSize={false} imageSmoothing={true} onUserMedia={() => {}} onUserMediaError={() => {}} screenshotQuality={0.92} />
-                                    </div>
-                                )}
-
-                                {!state.selfie && (
-                                    <button onClick={captureSelfie} className="bg-blue-600 text-white px-6 py-2.5 rounded-full font-bold shadow-lg text-sm flex items-center gap-2 active:scale-95 transition-transform">
-                                        <Camera size={16} /> 拍照确认
-                                    </button>
-                                )}
-                            </div>
-                       </div>
-
-                       <div onClick={() => { if (!state.selfie && !isAdmin) { alert("请先完成自拍确认"); return; } setShowSignatureOverlay(true); }} className={`bg-white rounded-2xl border-2 border-dashed flex flex-col items-center justify-center min-h-[180px] relative transition-all ${state.signature ? 'border-blue-200 bg-blue-50/20' : 'border-slate-300 text-slate-400 active:bg-slate-50'}`}>
-                         {state.signature ? (
-                           <>
-                            <img src={state.signature} className="h-32 object-contain" />
-                            <div className="absolute top-2 right-2 bg-blue-600 text-white px-2 py-1 rounded-full text-[10px] font-bold"><PenTool size={10}/> 重签</div>
-                           </>
-                         ) : (
-                           <>
-                             <PenTool size={48} className="mb-2 opacity-20" />
-                             <span className="font-bold">点击开始横屏签名</span>
-                           </>
-                         )}
-                       </div>
-                   </div>
-               )}
-            </div>
-         </div>
-         {/* Footer Buttons for Sign Step */}
-         <div className="fixed bottom-0 left-0 w-full bg-white border-t border-slate-200 p-4 pb-6 px-6 z-40 flex gap-4">
-             <button onClick={() => setStep('inspect')} className="px-6 py-4 rounded-xl font-bold bg-slate-100 text-slate-600">返回</button>
-             <button disabled={(!isAdmin && (!canSign || !state.signature || !state.selfie)) || isGenerating} onClick={handleGeneratePDF} className={`flex-1 rounded-xl font-bold text-white shadow-xl flex items-center justify-center gap-2 ${(canSign && state.signature && state.selfie) || isAdmin ? (isAdmin ? 'bg-indigo-600' : 'bg-blue-600') : 'bg-slate-300'}`}>
-                {isGenerating ? <div className="animate-spin rounded-full h-5 w-5 border-2 border-white/30 border-t-white" /> : <><Download /> {isAdmin ? '强制生成报告' : '生成报告'}</>}
-             </button>
-         </div>
-
-         <div ref={reportHeaderRef} style={{ position: 'absolute', top: -9999, left: -9999, width: '210mm' }} className="bg-white px-6 py-2 border-b border-black/50 flex items-center justify-between">
-            <div className="text-xs font-bold text-black">注册号 REG: B-{state.info.registration}</div>
-            <div className="text-xs font-bold text-black flex items-center gap-2">
-                检查员 Inspector: {state.info.inspectorName}
-                {state.signature && <img src={state.signature} className="h-6 object-contain" />}
-            </div>
-            <div className="text-xs font-bold text-black">日期 Date: {state.info.date}</div>
-         </div>
-
-         <div className="fixed top-0 left-[-9999px] w-[210mm] bg-white text-black pointer-events-none" ref={printRef}>
-            <div id="print-container" style={{ WebkitFontSmoothing: 'antialiased', textRendering: 'geometricPrecision' }}>
-               <div className="break-inside-avoid p-6 pb-0">
-                   <div className="border-4 border-black p-4 mb-4 flex flex-col items-center justify-center">
-                       <h1 className="text-2xl font-black text-black leading-none mb-2">飞机最终检查单 AIRCRAFT FINAL INSPECTION</h1>
-                       <div className="text-sm font-bold text-black tracking-[0.2em] uppercase">客舱车间 CABIN WORKSHOP</div>
-                   </div>
-                   
-                   <div className="flex border-2 border-black mb-2 bg-slate-50">
-                     <div className="flex-1 p-3 flex flex-col justify-center gap-4">
-                         <div>
-                             <div className="text-[10px] font-bold text-slate-500 uppercase">注册号 REG</div>
-                             <div className="text-2xl font-black font-mono text-black">B-{state.info.registration}</div>
-                         </div>
-                         <div>
-                             <div className="text-[10px] font-bold text-slate-500 uppercase">日期 DATE</div>
-                             <div className="text-xl font-bold font-mono text-black">{state.info.date}</div>
-                         </div>
-                     </div>
-
-                     <div className="flex-1 p-3 border-l-2 border-black flex flex-col justify-between">
-                        <div>
-                             <div className="text-[10px] font-bold text-slate-500 uppercase">检查员 INSPECTOR</div>
-                             <div className="text-xl font-bold text-black">{state.info.inspectorName}</div>
-                        </div>
-                        <div className="mt-2">
-                             <div className="text-[10px] font-bold text-slate-500 uppercase">签名 SIGNATURE</div>
-                             {state.signature && <img src={state.signature} className="h-12 object-contain -ml-2" />}
-                        </div>
-                     </div>
-
-                     <div className="w-32 border-l-2 border-black bg-white p-1">
-                        {state.selfie ? (
-                            <img src={state.selfie} className="w-full h-full object-cover block" />
-                        ) : (
-                            <div className="w-full h-full flex items-center justify-center text-slate-300 font-bold text-xs uppercase text-center">No Photo</div>
-                        )}
-                     </div>
-                   </div>
-
-                   <div className="border-2 border-black border-t-0 p-3 mb-4 bg-white">
-                      <div className="font-bold text-black mb-1 border-b border-slate-300 pb-1">检查要求 / REQUIREMENTS</div>
-                      {REPORT_REQUIREMENTS.map((req, i) => (
-                        <div key={i} className="text-sm font-bold text-red-600 leading-snug mb-0.5 last:mb-0">{req}</div>
-                      ))}
-                   </div>
-               </div>
-               
-               {/* Main Checklist */}
-               <div className="px-6 space-y-4">
-                 {CHECKLIST_DATA.map(section => (
-                   <div key={section.id} className="section-block">
-                      <div className="break-inside-avoid bg-black text-white font-black px-4 py-2 text-xl uppercase mb-1 flex items-center justify-center tracking-wider">{cleanText(section.title)}</div>
-                      <div className="">
-                          {flattenItemsForReport(section).map((item, idx) => {
-                             const entry = state.session[item.uniqueId];
-                             const status = entry?.status || 'unchecked';
-                             const isHighlight = HIGHLIGHT_RED_IDS.includes(item.uniqueId);
-
-                             return (
-                               <div key={item.uniqueId} className={`flex border border-slate-400 break-inside-avoid -mt-[1px] relative z-10 ${idx%2===0 ? 'bg-white':'bg-slate-50'}`}>
-                                 <div className="p-2 pl-3 w-3/4 border-r border-slate-400 text-sm flex items-center">
-                                   <div className={`font-bold leading-snug ${isHighlight ? 'text-red-600' : 'text-black'}`}>
-                                     {cleanText(item.label)} 
-                                     {item.subLabel && (
-                                         <span className="bg-slate-200 inline-flex items-center justify-center h-6 px-2 rounded-md text-xs ml-2 text-black font-black leading-none pt-[1px]">
-                                             {cleanText(item.subLabel)}
-                                         </span>
-                                     )}
-                                   </div>
-                                 </div>
-                                 <div className="p-2 w-1/4 flex flex-col items-center justify-center">
-                                    <div className="flex items-center justify-center gap-2 h-full my-auto">
-                                        {status === 'ok' && <span className="font-black text-emerald-800 text-xl leading-none">OK</span>}
-                                        {status === 'na' && <span className="font-bold text-slate-400 text-sm">N/A</span>}
-                                        {status === 'flagged' && <span className="font-bold text-white bg-red-600 px-2 py-0.5 rounded text-xs">ISSUE</span>}
-                                        
-                                        {entry?.timestamp && (
-                                        <span className="text-base text-black font-mono font-bold leading-none translate-y-[1px]">
-                                            {format(new Date(entry.timestamp), 'HH:mm')}
-                                        </span>
-                                        )}
-                                    </div>
-                                   {entry?.value && (
-                                     <div className={`mt-1 text-[10px] border border-black inline-block px-1 rounded font-bold ${entry.value === 'RED' ? 'bg-red-500 text-white' : entry.value === 'YELLOW' ? 'bg-yellow-400 text-black' : entry.value === 'GREEN' ? 'bg-emerald-500 text-white' : 'bg-white text-black'}`}>{entry.value} PSI</div>
-                                   )}
-                                 </div>
-                               </div>
-                             );
-                          })}
-                      </div>
-                   </div>
-                 ))}
-               </div>
-
-               {/* Rectification & Defects Section - Support History */}
-               {getRectifiedOrFlaggedItems().length > 0 && (
-                 <div className="px-6 mt-8 pt-4 border-t-2 border-slate-300">
-                    <div className="bg-slate-900 text-white font-black px-4 py-3 text-xl uppercase mb-4 flex items-center justify-center tracking-wider break-inside-avoid">
-                        故障及整改记录 / DEFECTS & RECTIFICATION RECORDS
-                    </div>
-                    <div className="space-y-6">
-                        {getRectifiedOrFlaggedItems().map((item, i) => {
-                            const entry = state.session[item.uniqueId];
-                            const allRecords = [
-                                ...(entry.history || []),
-                                { 
-                                    issueNote: entry.issueNote, 
-                                    issuePhotos: entry.issuePhotos, 
-                                    rectification: entry.rectification,
-                                    timestamp: entry.timestamp,
-                                    isCurrent: true 
-                                }
-                            ].filter(r => r.issueNote || r.rectification);
-
-                            return (
-                                <div key={i} className="border-2 border-slate-400 p-0 flex flex-col bg-white break-inside-avoid">
-                                    <div className="bg-slate-100 p-2 border-b-2 border-slate-400 font-bold text-black flex justify-between items-center">
-                                        <span>#{i+1} - {cleanText(item.label)} {item.subLabel ? `(${item.subLabel})` : ''}</span>
-                                        <span className="text-xs bg-slate-200 px-2 py-1 rounded">ID: {item.uniqueId}</span>
-                                    </div>
-                                    
-                                    {allRecords.map((rec: any, idx) => (
-                                        <div key={idx} className={`flex ${idx > 0 ? 'border-t-2 border-slate-300' : ''}`}>
-                                            {/* Issue Column */}
-                                            <div className="flex-1 p-3 border-r-2 border-slate-400">
-                                                <div className="flex justify-between items-center mb-1">
-                                                    <div className="text-[10px] font-bold text-slate-500 uppercase">发现问题 FINDING {rec.isCurrent ? '(CURRENT)' : '(HISTORY)'}</div>
-                                                    <div className="text-[10px] font-mono text-slate-400">{rec.timestamp ? format(new Date(rec.timestamp), 'HH:mm') : ''}</div>
-                                                </div>
-                                                <div className="font-bold text-red-600 text-sm mb-2">{rec.issueNote || '未记录详细描述'}</div>
-                                                {rec.issuePhotos && rec.issuePhotos.length > 0 && (
-                                                    <div className="grid grid-cols-2 gap-2 mt-2">
-                                                        {rec.issuePhotos.map((p: string, pIdx: number) => (
-                                                            <div key={pIdx} className="w-full h-32 border border-slate-200 bg-black/5 flex items-center justify-center overflow-hidden">
-                                                                <img src={p} className="max-w-full max-h-full object-contain" />
-                                                            </div>
-                                                        ))}
-                                                    </div>
-                                                )}
-                                            </div>
-                                            {/* Rectification Column */}
-                                            <div className="flex-1 p-3 bg-emerald-50/30">
-                                                <div className="flex justify-between items-center mb-1">
-                                                    <div className="text-[10px] font-bold text-slate-500 uppercase">整改措施 RECTIFICATION</div>
-                                                    <div className="text-[10px] font-mono text-slate-400">{rec.rectification?.timestamp ? format(new Date(rec.rectification.timestamp), 'HH:mm') : ''}</div>
-                                                </div>
-                                                <div className="font-bold text-emerald-800 text-sm mb-2">{rec.rectification?.method || (rec.isCurrent && entry.status === 'flagged' ? '待整改 (Pending)' : '已解决')}</div>
-                                                
-                                                {rec.rectification?.photos && rec.rectification.photos.length > 0 && (
-                                                    <div className="grid grid-cols-2 gap-2 mt-2">
-                                                        {rec.rectification.photos.map((p: string, pIdx: number) => (
-                                                             <div key={pIdx} className="w-full h-32 border border-slate-200 bg-white flex items-center justify-center overflow-hidden">
-                                                                <img src={p} className="max-w-full max-h-full object-contain" />
-                                                            </div>
-                                                        ))}
-                                                    </div>
-                                                )}
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            );
-                        })}
-                    </div>
-                 </div>
-               )}
-            </div>
-         </div>
-         
-         {/* Hidden Batch Share Image Template */}
-         <div 
-             ref={allIssuesExportRef} 
-             style={{ display: 'none', position: 'absolute', top: 0, left: 0, width: '600px', backgroundColor: '#f8fafc', padding: '40px', borderRadius: '24px', zIndex: -1 }}
-         >
-             {/* Req 4: Report Title Change to "Defect Report" (Red) */}
-             <div className="bg-red-600 px-8 py-6 mb-8 flex items-end justify-between rounded-3xl shadow-lg">
-                <div>
-                   <h2 className="text-4xl font-black text-white leading-none tracking-tight">缺陷报告</h2>
-                   <div className="text-sm font-bold text-red-100 uppercase tracking-[0.4em] mt-2 opacity-90">DEFECT REPORT</div>
-                </div>
-             </div>
-             
-             <div className="flex justify-between bg-white p-6 rounded-3xl border border-slate-200 mb-10 shadow-sm">
-                <div><div className="text-xs font-bold text-slate-400 uppercase mb-1">注册号 REG</div><div className="text-3xl font-black text-slate-900 font-mono">B-{state.info.registration}</div></div>
-                <div><div className="text-xs font-bold text-slate-400 uppercase mb-1">检查员 INSPECTOR</div><div className="text-2xl font-bold text-slate-900">{state.info.inspectorName}</div></div>
-                <div className="text-right"><div className="text-xs font-bold text-slate-400 uppercase mb-1">日期 DATE</div><div className="text-2xl font-mono font-bold text-slate-900">{state.info.date}</div></div>
-             </div>
-
-             <div className="space-y-12">
-                 {(() => {
-                    let lastSectionTitle = '';
-                    return getItemsForBatchShare().map((item, idx) => {
-                     const entry = state.session[item.uniqueId];
-                     const sectionTitle = getSectionTitle(item.uniqueId);
-                     const parentLabel = getParentLabel(item.uniqueId); // Req 4: Get Parent Item Label
-                     
-                     const showSectionHeader = sectionTitle !== lastSectionTitle;
-                     if (showSectionHeader) lastSectionTitle = sectionTitle;
-
-                     return (
-                         <div key={item.uniqueId} className="break-inside-avoid">
-                             {/* Req 5: Section Location Header */}
-                             {showSectionHeader && (
-                                 <div className="mb-6 mt-8 border-b-2 border-slate-200 pb-2">
-                                     <span className="inline-block px-4 py-1.5 rounded-lg bg-slate-200 text-slate-600 font-black text-sm shadow-sm">
-                                         {sectionTitle}
-                                     </span>
-                                 </div>
-                             )}
-
-                             <div className="bg-white border-l-[16px] border-red-500 pl-8 py-6 mb-6 rounded-r-3xl shadow-xl border-y border-r border-slate-200">
-                                <div className="text-xs font-bold text-red-400 uppercase mb-2 tracking-wider">Finding #{idx + 1}</div>
-                                
-                                {/* Req 4: Display Parent Label clearly if it exists */}
-                                {parentLabel && (
-                                    <div className="mb-3 text-lg font-bold text-slate-800 leading-tight">
-                                        {cleanText(parentLabel)}
-                                    </div>
-                                )}
-
-                                {item.subLabel && (
-                                    <div className="mb-4">
-                                        <span className="inline-block bg-slate-900 text-white text-xl font-black px-4 py-1.5 rounded-lg shadow-sm uppercase">
-                                            {cleanText(item.subLabel)}
-                                        </span>
-                                    </div>
-                                )}
-                                <div className="text-2xl font-bold text-slate-900 leading-tight">{cleanText(item.label)}</div>
-                             </div>
-
-                             {entry?.issueNote && (
-                               <div className="mb-6 px-2">
-                                 <div className="flex items-center gap-2 mb-2">
-                                    <div className="w-1 h-4 bg-yellow-400 rounded-full"></div>
-                                    <div className="text-sm font-bold text-slate-400 uppercase">备注 / Note</div>
-                                 </div>
-                                 <div className="bg-yellow-50 p-5 rounded-2xl border border-yellow-200 text-xl font-medium text-slate-800 leading-relaxed shadow-sm">
-                                    {entry.issueNote}
-                                 </div>
-                               </div>
-                             )}
-
-                             {entry?.issuePhotos && entry.issuePhotos.length > 0 && (
-                               <div className="px-2">
-                                   <div className="flex items-center gap-2 mb-4 border-b border-slate-200 pb-2">
-                                        <div className="w-1 h-4 bg-blue-500 rounded-full"></div>
-                                        <div className="text-sm font-bold text-slate-400 uppercase">现场照片 / Photos</div>
-                                   </div>
-                                   <div className="flex flex-col gap-6">
-                                     {entry.issuePhotos.map((p, pIdx) => (
-                                       <div key={pIdx} className="w-full rounded-2xl overflow-hidden border border-slate-200 shadow-lg bg-white relative">
-                                         <img src={p} className="w-full h-auto block" />
-                                         <div className="absolute bottom-3 right-3 bg-black/70 backdrop-blur-sm text-white text-xs px-3 py-1.5 rounded-full font-bold">
-                                              Photo {pIdx + 1}
-                                         </div>
-                                       </div>
-                                     ))}
-                                   </div>
-                               </div>
-                             )}
-                             
-                             {idx < getItemsForBatchShare().length - 1 && <div className="border-b-4 border-slate-200 my-10"></div>}
-                         </div>
-                     );
-                 });
-                 })()}
-             </div>
-             
-             <div className="mt-16 pt-8 border-t-2 border-slate-200 flex justify-between items-center text-slate-400 text-xs font-bold uppercase tracking-wide">
-                  <span>Aircraft Final Inspection App</span>
-                  <span>生成时间 Generated: {new Date().toLocaleTimeString()}</span>
-             </div>
-         </div>
-       </div>
     );
   }
   return null;

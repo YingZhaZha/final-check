@@ -17,6 +17,7 @@ interface Props {
   onUpdate: (id: string, updates: Partial<CheckEntry>) => void;
   isSubItem?: boolean;
   info: { registration: string; inspectorName: string; date: string };
+  sectionTitle?: string;
 }
 
 // Portal Component to fix z-index/transform issues
@@ -91,7 +92,7 @@ const compressImage = (file: File): Promise<string> => {
 };
 
 export const CheckItem: React.FC<Props> = ({ 
-  uniqueId, label, subLabel, requiresInput, inputLabel, pressureType, entry, onUpdate, isSubItem, info
+  uniqueId, label, subLabel, requiresInput, inputLabel, pressureType, entry, onUpdate, isSubItem, info, sectionTitle
 }) => {
   const status: ItemStatus = entry?.status || 'unchecked';
   const isStarred = entry?.isStarred || false;
@@ -244,7 +245,7 @@ export const CheckItem: React.FC<Props> = ({
   const handleDefectConfirm = (jumpToRectify: boolean) => {
       onUpdate(uniqueId, {
           status: 'flagged',
-          timestamp: new Date().toISOString(),
+          timestamp: new Date().toISOString(), // Finding Timestamp
           issueNote: defectNote,
           issuePhotos: defectPhotos,
           rectification: undefined 
@@ -263,11 +264,13 @@ export const CheckItem: React.FC<Props> = ({
           status: 'ok', 
           // Req 7: Auto star when rectified
           isStarred: true, 
+          // Keep finding timestamp if possible? No, we update status to OK, so this is OK time.
+          // But rectification object has its own timestamp.
           timestamp: new Date().toISOString(),
           rectification: {
               method: rectifyMethod || '已现场整改',
               photos: rectifyPhotos,
-              timestamp: new Date().toISOString()
+              timestamp: new Date().toISOString() // Rectification Timestamp
           }
       });
       setShowRectifyModal(false);
@@ -804,19 +807,30 @@ export const CheckItem: React.FC<Props> = ({
                           <div className="border-2 border-slate-200 rounded-xl p-3 bg-white">
                                <div className="flex justify-between items-center mb-2">
                                    <span className="bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded text-xs font-bold">当前状态</span>
-                                   {/* Req 6: HH:mm */}
-                                   <span className="text-xs text-slate-400">{entry.timestamp ? format(new Date(entry.timestamp), 'HH:mm') : ''}</span>
                                </div>
-                               {/* Req 6: Translate Issue to 发现缺陷, and timestamp to HH:mm */}
-                               <div className="text-sm font-bold text-slate-800 mb-1">发现缺陷: <span className="text-red-600">{entry.issueNote || '无描述'}</span></div>
+                               
+                               {/* Req: Split timestamps & Rename 整改 to 整改措施 */}
+                               
+                               <div className="flex justify-between items-baseline mb-1">
+                                    <div className="text-sm font-bold text-slate-800">发现缺陷: <span className="text-red-600">{entry.issueNote || '无描述'}</span></div>
+                                    <span className="text-[10px] font-mono text-slate-400 whitespace-nowrap ml-2">
+                                        {entry.timestamp ? format(new Date(entry.timestamp), 'HH:mm') : ''}
+                                    </span>
+                               </div>
                                {entry.issuePhotos.length > 0 && (
-                                   <div className="flex gap-2 overflow-x-auto mb-2">
+                                   <div className="flex gap-2 overflow-x-auto mb-3">
                                        {entry.issuePhotos.map((p, i) => <img key={i} src={p} className="w-12 h-12 object-cover rounded border" onClick={() => setPreviewImage(p)}/>)}
                                    </div>
                                )}
+                               
                                {entry.rectification && (
-                                   <div className="text-sm font-bold text-slate-800 mt-2 pt-2 border-t border-slate-100">
-                                       整改措施: <span className="text-emerald-600">{entry.rectification.method}</span>
+                                   <div className="pt-2 border-t border-slate-100">
+                                       <div className="flex justify-between items-baseline mb-1">
+                                            <div className="text-sm font-bold text-slate-800">整改措施: <span className="text-emerald-600">{entry.rectification.method}</span></div>
+                                            <span className="text-[10px] font-mono text-slate-400 whitespace-nowrap ml-2">
+                                                {entry.rectification.timestamp ? format(new Date(entry.rectification.timestamp), 'HH:mm') : ''}
+                                            </span>
+                                       </div>
                                        {entry.rectification.photos.length > 0 && (
                                            <div className="flex gap-2 overflow-x-auto mt-1">
                                                {entry.rectification.photos.map((p, i) => <img key={i} src={p} className="w-12 h-12 object-cover rounded border" onClick={() => setPreviewImage(p)}/>)}
@@ -832,14 +846,29 @@ export const CheckItem: React.FC<Props> = ({
                           <div key={i} className="border border-slate-100 rounded-xl p-3 bg-slate-50 opacity-80">
                                <div className="flex justify-between items-center mb-2">
                                    <span className="bg-slate-200 text-slate-500 px-2 py-0.5 rounded text-xs font-bold">历史记录 #{entry.history!.length - i}</span>
-                                   {/* Req 6: HH:mm */}
-                                   <span className="text-xs text-slate-400">{h.timestamp ? format(new Date(h.timestamp), 'HH:mm') : ''}</span>
                                </div>
-                               <div className="text-xs text-slate-600 mb-1"><span className="font-bold">发现缺陷:</span> {h.issueNote || '无描述'}</div>
-                               <div className="flex gap-1 overflow-x-auto mb-1">
+                               
+                               <div className="flex justify-between items-baseline mb-1">
+                                    <div className="text-xs text-slate-600"><span className="font-bold">发现缺陷:</span> {h.issueNote || '无描述'}</div>
+                                    <span className="text-[10px] font-mono text-slate-400 whitespace-nowrap ml-2">
+                                        {h.timestamp ? format(new Date(h.timestamp), 'HH:mm') : ''}
+                                    </span>
+                               </div>
+
+                               <div className="flex gap-1 overflow-x-auto mb-2">
                                    {h.issuePhotos.map((p, x) => <img key={x} src={p} className="w-8 h-8 object-cover rounded" onClick={() => setPreviewImage(p)}/>)}
                                </div>
-                               <div className="text-xs text-slate-600"><span className="font-bold">整改:</span> {h.rectification?.method}</div>
+
+                               {h.rectification && (
+                                   <div className="pt-1 border-t border-slate-200/50">
+                                       <div className="flex justify-between items-baseline">
+                                            <div className="text-xs text-slate-600"><span className="font-bold">整改措施:</span> {h.rectification.method}</div>
+                                            <span className="text-[10px] font-mono text-slate-400 whitespace-nowrap ml-2">
+                                                {h.rectification.timestamp ? format(new Date(h.rectification.timestamp), 'HH:mm') : ''}
+                                            </span>
+                                       </div>
+                                   </div>
+                               )}
                           </div>
                       ))}
                   </div>
@@ -870,17 +899,28 @@ export const CheckItem: React.FC<Props> = ({
                  </div>
              </div>
              <div className="p-6">
+                 {/* Req: Added Section Title Badge */}
                  <div className="border-l-4 border-red-500 bg-red-50/50 p-4 rounded-r-xl">
-                     <div className="flex justify-between items-start mb-2">
-                         <div className="font-bold text-slate-900 text-lg pr-4">
-                             {label} {subLabel && <span className="bg-slate-200 text-slate-600 px-2 py-0.5 rounded text-sm">{subLabel}</span>}
-                         </div>
+                     <div className="font-bold text-red-400 text-xs uppercase tracking-wider mb-2">
+                         FINDING #1
                      </div>
-                     <div className="text-red-800 font-medium mb-3">{defectNote || '无详细描述'}</div>
+                     {sectionTitle && (
+                        <div className="mb-3">
+                            <span className="bg-slate-200/80 text-slate-600 px-2 py-1 rounded text-[10px] font-black uppercase tracking-tight">
+                                {sectionTitle}
+                            </span>
+                        </div>
+                     )}
+                     <div className="font-bold text-slate-900 text-lg mb-3">
+                         {label} {subLabel && <span className="bg-slate-200 text-slate-600 px-2 py-0.5 rounded text-sm ml-1">{subLabel}</span>}
+                     </div>
+                     <div className="text-red-800 font-medium mb-3 pt-2 border-t border-red-100">{defectNote || '无详细描述'}</div>
+                     
+                     {/* Req: Fixed image stretching by removing height constraints and letting width fit */}
                      {defectPhotos.length > 0 && (
                          <div className="flex flex-col gap-4 mt-3">
                              {defectPhotos.map((p, pIdx) => (
-                                 <img key={pIdx} src={p} className="w-full h-auto object-contain rounded-lg border border-red-100 bg-white shadow-sm" style={{maxWidth: '100%', maxHeight: '400px'}} />
+                                 <img key={pIdx} src={p} className="w-full h-auto object-contain rounded-lg border border-red-100 bg-white shadow-sm" />
                              ))}
                          </div>
                      )}
